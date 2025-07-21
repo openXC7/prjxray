@@ -1,3 +1,4 @@
+flufl.lock
 intervaltree
 junit-xml
 numpy

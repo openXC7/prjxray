@@ -8,7 +8,7 @@
 # https://opensource.org/licenses/ISC
 #
 # SPDX-License-Identifier: ISC
-import fcntl
+from flufl.lock import Lock
 import math
 import os
 import random
@@ -31,10 +31,12 @@ class OpenSafeFile:
 
     def __init__(self, name, mode="r", timeout=10):
         self.name = name
+        self.lock_name = self.name + ".lock"
         self.mode = mode
         self.timeout = timeout
 
         self.fd = None
+        self.lock = None
 
     def __enter__(self):
         self.fd = open(self.name, self.mode)
@@ -48,17 +50,16 @@ class OpenSafeFile:
     def lock_file(self):
         assert self.fd is not None
         try:
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(self.timeout)
-            fcntl.flock(self.fd.fileno(), fcntl.LOCK_EX)
-            signal.alarm(0)
-        except Exception as e:
+            self.lock = Lock(self.lock_name, lifetime=self.timeout)
+            self.lock.lock()
+        except TimeoutError as e:
             print(f"{e}: {self.name}")
             exit(1)
 
     def unlock_file(self):
         assert self.fd is not None
-        fcntl.flock(self.fd.fileno(), fcntl.LOCK_UN)
+        assert self.lock is not None
+        self.lock.unlock()
 
 
 def get_db_root():
