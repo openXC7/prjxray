@@ -115,12 +115,17 @@ def learn(model, family_dir, device):
     return model.learn(device, grid, part_yaml)
 
 
-def learn_references(family_dir, references, elsewhere=None):
-    """Learn the law of one family from the named device models."""
+def learn_references(family_dir, references, elsewhere=None, prefer=None):
+    """Learn the law of one family from the named device models.
+
+    `prefer` names references that win a family tie outright; the
+    calibration gate passes none, because a gate with a preference is
+    measuring the preference.
+    """
     model = tilegrid_model.Model()
     for device in references:
         learn(model, family_dir, device)
-    model.resolve(elsewhere)
+    model.resolve(elsewhere, prefer)
     return model
 
 
@@ -323,6 +328,14 @@ def cmd_derive(args):
         print(
             'warning: %s is the fabric %s already maps to; deriving it from '
             'itself proves nothing' % (own, args.part))
+    prefer = args.prefer_reference
+    not_references = [d for d in prefer if d not in references]
+    if not_references:
+        print(
+            'ERROR: --prefer-reference %s, but the references are: %s' %
+            (' '.join(not_references), ' '.join(references) or 'none'),
+            file=sys.stderr)
+        return 1
     part_yaml = tilegrid_model.load_part(
         os.path.join(family_dir, args.part, PART_YAML))
 
@@ -334,7 +347,7 @@ def cmd_derive(args):
 
     family_models = learn_families(database_dir)
     elsewhere = learn_elsewhere(family_models, family)
-    model = learn_references(family_dir, references, elsewhere)
+    model = learn_references(family_dir, references, elsewhere, prefer)
     print('law learnt from %s' % ' '.join(model.references))
     print_rejected(model)
     print_conflicts(model)
@@ -360,14 +373,23 @@ def cmd_derive(args):
         c for c in model.unresolved_conflicts()
         if (c.tile_type, c.row_position, c.bus) in used
     ]
-    if unsettled and not args.allow_reference_conflicts:
+    if unsettled:
+        if not args.allow_reference_conflicts:
+            print(
+                'ERROR: %d tile geometries this grid uses are ones the '
+                'reference models disagree on and no vote could settle; '
+                'narrow --reference, name the one you trust with '
+                '--prefer-reference, or pass --allow-reference-conflicts to '
+                'take the deterministic pick.' % len(unsettled),
+                file=sys.stderr)
+            return 1
         print(
-            'ERROR: %d tile geometries this grid uses are ones the reference '
-            'models disagree on and no vote could settle; narrow --reference, '
-            'or pass --allow-reference-conflicts to take the first one given.'
-            % len(unsettled),
-            file=sys.stderr)
-        return 1
+            'WARNING: %d tile geometries this grid uses rest on a pick no '
+            'vote settled, taken because --allow-reference-conflicts was '
+            'given:' % len(unsettled))
+        for conflict in unsettled:
+            for line in conflict.describe().split('\n'):
+                print('    %s' % line)
 
     report = model.apply(
         grid, part_yaml, elsewhere if args.cross_family_fallback else None)
@@ -471,6 +493,14 @@ def main():
         'separated list is accepted. Defaults to every device model of the '
         'family except the one this part is already a part of.')
     derive.add_argument(
+        '--prefer-reference',
+        action='append',
+        default=[],
+        help='reference device whose geometry wins when the family vote '
+        'ties, before the other families are asked; repeatable, and a comma '
+        'separated list is accepted. Does not override a majority of the '
+        'family; narrow --reference for that.')
+    derive.add_argument(
         '--output', required=True, help='tilegrid.json to write')
     derive.add_argument(
         '--cross-family-fallback',
@@ -480,7 +510,9 @@ def main():
     derive.add_argument(
         '--allow-reference-conflicts',
         action='store_true',
-        help='derive even where the reference models disagree')
+        help='derive even where the reference models disagree and no vote '
+        'could settle it; the pick is deterministic (the alphabetically '
+        'first tied reference) and is printed')
     derive.set_defaults(func=cmd_derive)
 
     compare = commands.add_parser(
@@ -506,6 +538,10 @@ def main():
         for reference in args.reference:
             flat.extend(r for r in reference.split(',') if r)
         args.reference = flat
+        flat = []
+        for preferred in args.prefer_reference:
+            flat.extend(r for r in preferred.split(',') if r)
+        args.prefer_reference = flat
     return args.func(args)
 
 
