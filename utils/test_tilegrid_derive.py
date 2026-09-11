@@ -241,6 +241,61 @@ class TestLaw(unittest.TestCase):
         model.apply(target, target_part)
         self.assertEqual(target['DSP_R_X0Y10']['bits'], {})
 
+    def tied_model(self, learn_order, prefer=None):
+        """Two references that disagree on every geometry, learnt in the
+        given order; the resolved model."""
+        model = tilegrid_model.Model()
+        for device, offset in learn_order:
+            grid, part = synthetic_device(columns=3)
+            address_synthetic(grid, part)
+            for tile in grid.values():
+                tile['bits']['CLB_IO_CLK']['offset'] = offset
+            model.learn(device, grid, part)
+        model.resolve(prefer=prefer)
+        return model
+
+    def test_a_tie_of_two_goes_to_the_first_alphabetically(self):
+        """A tie no vote can settle is deterministic: the alphabetically
+        first tied reference wins, in whichever order the references were
+        learnt."""
+        for learn_order in (
+            [('ref-b', 100), ('ref-a', 200)],
+            [('ref-a', 200), ('ref-b', 100)],
+        ):
+            model = self.tied_model(learn_order)
+            self.assertTrue(model.conflicts)
+            self.assertEqual(
+                {c.resolution
+                 for c in model.conflicts}, {'arbitrary'})
+            self.assertEqual(
+                len(model.unresolved_conflicts()), len(model.conflicts))
+            for geometry in model.geometry.values():
+                self.assertEqual(geometry['offset'], 200)  # ref-a's
+            self.assertIn('ref-a', model.conflicts[0].describe())
+
+    def test_preferred_reference_wins_a_tie(self):
+        """A named reference beats the deterministic pick, and is recorded."""
+        model = self.tied_model(
+            [('ref-b', 100), ('ref-a', 200)], prefer=['ref-b'])
+        self.assertEqual(
+            {c.resolution
+             for c in model.conflicts}, {'preferred reference'})
+        self.assertEqual(model.unresolved_conflicts(), [])
+        for geometry in model.geometry.values():
+            self.assertEqual(geometry['offset'], 100)
+
+    def test_preferred_references_that_split_settle_nothing(self):
+        """A preference naming both sides of the tie settles nothing, and
+        one naming neither side is ignored."""
+        for prefer in (['ref-a', 'ref-b'], ['ref-c']):
+            model = self.tied_model(
+                [('ref-b', 100), ('ref-a', 200)], prefer=prefer)
+            self.assertEqual(
+                {c.resolution
+                 for c in model.conflicts}, {'arbitrary'})
+            for geometry in model.geometry.values():
+                self.assertEqual(geometry['offset'], 200)
+
 
 @unittest.skipIf(database_dir() is None, 'no database with device models')
 class TestCalibration(unittest.TestCase):

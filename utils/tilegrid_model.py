@@ -200,16 +200,32 @@ class Conflict(collections.namedtuple(
 
     `alternatives` is a list of (geometry, [devices], outside_votes), the one
     that won first.  `resolution` says how it won: 'majority' (most devices in
-    the family), 'other families' (the family was split evenly and the models
-    of the other families broke the tie) or 'arbitrary' (nothing broke the
-    tie, so the first reference given won and the answer is a guess).
+    the family), 'preferred reference' (the family was split evenly and a
+    reference named with --prefer-reference was one of the tied ones),
+    'other families' (the family was split evenly and the models of the
+    other families broke the tie) or 'arbitrary' (nothing broke the tie, so
+    the alphabetically first tied reference won -- a fixed rule, never the
+    order the references were given in).
     """
 
     def describe(self):
-        lines = [
-            '%s row_position=%d %s -- resolved by %s' %
-            (self.tile_type, self.row_position, self.bus, self.resolution)
-        ]
+        winner_devices = self.alternatives[0][1]
+        if self.resolution == 'arbitrary':
+            headline = (
+                '%s row_position=%d %s -- no vote settled it; %s wins as '
+                'the alphabetically first tied reference' % (
+                    self.tile_type, self.row_position, self.bus,
+                    winner_devices[0]))
+        elif self.resolution == 'preferred reference':
+            headline = (
+                '%s row_position=%d %s -- settled by the preferred '
+                'reference (%s)' % (
+                    self.tile_type, self.row_position, self.bus,
+                    ' '.join(winner_devices)))
+        else:
+            headline = '%s row_position=%d %s -- resolved by %s' % (
+                self.tile_type, self.row_position, self.bus, self.resolution)
+        lines = [headline]
         for geom, devices, outside in self.alternatives:
             lines.append(
                 '    %-40s %s%s' % (
@@ -269,7 +285,7 @@ class Model:
         self.conflicts = []
         return True, 'ok'
 
-    def resolve(self, tiebreaker=None):
+    def resolve(self, tiebreaker=None, prefer=None):
         """Turn the observations into one geometry per key.
 
         Observations that differ only in `frames` are the same geometry seen
@@ -278,11 +294,19 @@ class Model:
         reference models, and it is resolved in this order:
 
         1. the geometry the most devices of the family agree on;
-        2. if the family is split evenly, the geometry the models in
-           `tiebreaker` agree on -- pass a model built from the *other*
-           families, so a device never gets to vote on itself;
-        3. if that is split too, the first reference given wins and the
-           conflict is marked 'arbitrary'.
+        2. if the family is split evenly and `prefer` names one of the tied
+           references, that reference wins outright -- an explicit choice
+           beats the proxy votes below, which can be stale (every older
+           model may carry a value the current fuzzer no longer writes), but
+           it does not beat a majority of the family itself; narrow the
+           reference list for that;
+        3. with nothing preferred, the geometry the models in `tiebreaker`
+           agree on -- pass a model built from the *other* families, so a
+           device never gets to vote on itself;
+        4. if that is split too, the alphabetically first of the tied
+           references wins -- a fixed rule, never the order the references
+           happened to be given in -- and the conflict is marked
+           'arbitrary'.
 
         Every disagreement is recorded in self.conflicts whichever way it
         went, because a model standing alone against the rest of the database
@@ -304,12 +328,23 @@ class Model:
             leaders = [m for m in merged if len(m[1]) == top]
             resolution = 'majority'
             if len(leaders) > 1:
-                best_outside = max(m[2] for m in leaders)
-                outside_leaders = [m for m in leaders if m[2] == best_outside]
-                resolution = (
-                    'other families' if best_outside
-                    and len(outside_leaders) == 1 else 'arbitrary')
-                leaders = outside_leaders
+                preferred = [
+                    m for m in leaders
+                    if prefer and any(d in prefer for d in m[1])
+                ]
+                if len(preferred) == 1:
+                    leaders = preferred
+                    resolution = 'preferred reference'
+                else:
+                    best_outside = max(m[2] for m in leaders)
+                    leaders = [m for m in leaders if m[2] == best_outside]
+                    if best_outside and len(leaders) == 1:
+                        resolution = 'other families'
+                    else:
+                        # Nothing broke the tie: a fixed rule, not the order
+                        # the references happened to be learnt in.
+                        leaders.sort(key=lambda m: m[1])
+                        resolution = 'arbitrary'
             winner = leaders[0]
             self.geometry[key] = winner[0]
             if len(merged) > 1:
