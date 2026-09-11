@@ -120,16 +120,36 @@ Where the references disagree
 -----------------------------
 
 Two reference models can contradict each other -- that is what a wrong model
-looks like from the inside.  The tool resolves a disagreement by counting
-devices: the majority of the family wins; if the family is split evenly, the
-models of the *other* families break the tie; if nothing breaks it, the first
-``--reference`` given wins and the conflict is reported as ``arbitrary``,
-which ``derive`` refuses to proceed on unless told to.  Whichever way it goes,
-the disagreement is printed with the vote::
+looks like from the inside.  The tool settles a disagreement in four steps:
+
+1. the geometry the most devices of the family agree on wins;
+2. if the family is split evenly, a reference named with
+   ``--prefer-reference`` wins outright.  An explicit choice beats the proxy
+   votes below, which can be *stale*: on the ``*_SING`` tiles'
+   ``alias.start_offset``, every device model committed before ``xc7s25``
+   still votes the 0 that ``generate_full.py`` has not written since the
+   VC707 fix.  A preference never overrides a majority of the family itself
+   -- narrow ``--reference`` for that;
+3. with nothing preferred, the models of the *other* families break the tie;
+4. if nothing breaks it, the alphabetically first of the tied references
+   wins -- a fixed rule, never the order the references happened to be given
+   in.  The conflict is reported as ``arbitrary``, and ``derive`` refuses to
+   proceed on a geometry its grid actually uses unless told to, with
+   ``--allow-reference-conflicts``; then it prints each such pick, what won,
+   and what the alternative was.
+
+Whichever way it goes, the disagreement is printed with the vote::
 
     CLK_BUFG_BOT_R row_position=47 CLB_IO_CLK -- resolved by other families
         {"frames": 30, "offset": 93, "words": 8} xc7s50 (+13 elsewhere)
         {"frames": 30, "offset": 98, "words": 3} xc7s100
+
+Mind that the tie-breaking model is only as complete as the database you
+point at: run ``derive`` against a family-only checkout and step 3 has nobody
+left to ask, so every family tie lands on step 4.  The pick is still
+deterministic and is still printed, but if you *know* which reference to
+trust -- the freshly fuzzed one, say -- this is what ``--prefer-reference``
+is for.
 
 Adding a device
 ---------------
