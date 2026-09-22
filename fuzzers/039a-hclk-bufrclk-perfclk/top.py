@@ -25,6 +25,13 @@
 #   neg_bufh            BUFHCE into a CLB, no BUFR
 #   neg_unconsumed      BUFR placed with its O left open
 #   perf0 / perf1       MMCM CLKOUT0 only / CLKOUT1 only, CLB sink
+#   mmcm0..mmcm3        one-hot: only that BUFRCLK index, fed by CLKOUTn
+#
+# FUZZ_SIDE=L or R keeps the MMCM on that CMT column
+# (CMT_TOP_L_LOWER_B / HCLK_CMT_L, or CMT_TOP_R_LOWER_B / HCLK_CMT).
+# Unset, each clock region uses its own MMCM, which is one site.
+# Kintex-7's second column has its BUFRs in HCLK_IOI (HP, IOB18),
+# not HCLK_IOI3, so those tiles are walked too.
 import json
 import os
 import random
@@ -38,6 +45,10 @@ BUFRCLK_TO_REL_Y = {v: k for k, v in REL_Y_TO_BUFRCLK.items()}
 
 IOSTANDARD = os.getenv("XRAY_IOSTANDARD", "LVCMOS33")
 MODE = os.getenv("FUZZ_MODE", "campaign")
+SIDE = os.getenv("FUZZ_SIDE", "").strip().upper()
+
+IOI_HR = ("LIOI3", "RIOI3")
+IOI_HP = ("LIOI", "RIOI")
 
 
 def seed_rng():
@@ -53,12 +64,35 @@ def load_grid():
     return db.grid()
 
 
+def iostd_for(site_type):
+    """HP IOB18 does not take the HR LVCMOS33 the rest of the fuzzer uses."""
+    if site_type.startswith("IOB18"):
+        return "LVCMOS18"
+    return IOSTANDARD
+
+
 def mmcm_by_region(grid):
+    """clock region -> (tile, site) for the column FUZZ_SIDE selects.
+
+    Each region has one MMCM, on CMT_TOP_L_LOWER_B (side L) or
+    CMT_TOP_R_LOWER_B (side R). With FUZZ_SIDE unset every region is
+    eligible, which is the previous behaviour.
+    """
     out = {}
     for tn in grid.tiles():
         gi = grid.gridinfo_at_loc(grid.loc_of_tilename(tn))
+        if gi.clock_region is None:
+            continue
+        if gi.tile_type == "CMT_TOP_L_LOWER_B":
+            side = "L"
+        elif gi.tile_type == "CMT_TOP_R_LOWER_B":
+            side = "R"
+        else:
+            continue
+        if SIDE and side != SIDE:
+            continue
         for st, sty in gi.sites.items():
-            if sty == "MMCME2_ADV" and gi.clock_region is not None:
+            if sty == "MMCME2_ADV":
                 out[str(gi.clock_region)] = (tn, st)
     return out
 
@@ -81,7 +115,12 @@ def slices_by_region(grid):
 
 
 def gen_hclk_ioi3(grid):
-    """Yield (tile, x_min, y_min, bufr_sites, iob33m, iob33s, region, mmcm_site)."""
+    """Yield (tile, x_min, y_min, bufr_sites, iob_m, iob_s, region, mmcm_site, iostd).
+
+    iostd maps an IOB site to the standard its bank accepts. HR tiles
+    (HCLK_IOI3 over IOI3) contribute IOB33; HP tiles (HCLK_IOI over IOI)
+    contribute IOB18. The four dy offsets are the same ones 039 uses.
+    """
     xy_bufr = util.create_xy_fun("BUFR_")
     mmcm = mmcm_by_region(grid)
     for tile_name in sorted(grid.tiles()):
@@ -94,21 +133,27 @@ def gen_hclk_ioi3(grid):
                 sites.append((site, x, y))
         if not sites:
             continue
-        ioi3 = grid.gridinfo_at_loc((loc.grid_x, loc.grid_y - 1))
-        if "IOI3" not in ioi3.tile_type:
+        below = grid.gridinfo_at_loc((loc.grid_x, loc.grid_y - 1))
+        tile_is_ioi = (
+            below.tile_type in IOI_HR or below.tile_type in IOI_HP
+        )
+        if not tile_is_ioi:
             continue
-        if ioi3.tile_type.startswith("R"):
+        if below.tile_type.startswith("R"):
             dx = 1
         else:
             dx = -1
         iobs_m, iobs_s = [], []
+        iostd = {}
         for dy in (-1, -3, 2, 4):
             iob = grid.gridinfo_at_loc((loc.grid_x + dx, loc.grid_y + dy))
             for site, site_type in iob.sites.items():
-                if site_type == "IOB33M":
+                if site_type in ("IOB33M", "IOB18M"):
                     iobs_m.append(site)
-                elif site_type == "IOB33S":
+                    iostd[site] = iostd_for(site_type)
+                elif site_type in ("IOB33S", "IOB18S"):
                     iobs_s.append(site)
+                    iostd[site] = iostd_for(site_type)
         region = str(gi.clock_region) if gi.clock_region is not None else ""
         mmcm_site = mmcm.get(region, (None, None))[1]
         xs = [s[1] for s in sites]
@@ -122,10 +167,18 @@ def gen_hclk_ioi3(grid):
             sorted(iobs_s),
             region,
             mmcm_site,
+            iostd,
         )
 
 
 def choose_state(rel_y):
+    if MODE == "campaign" and SIDE:
+        # The column is fixed, so the sample should land on the MMCM
+        # path. Which BUFR index is used, and therefore which CLKOUT
+        # (rel_y % 4), stays random. The unset-SIDE mix below is the
+        # original 039a population and is unchanged.
+        return random.choice(
+            ["unused", "mmcm_clb", "mmcm_clb", "mmcm_clb"])
     if MODE == "campaign":
         return random.choice(
             ["unused", "unused", "pad_clb", "pad_clb", "pad_clb",
@@ -143,10 +196,13 @@ def choose_state(rel_y):
         return "pad_open" if rel_y == 0 else "unused"
     if MODE in ("perf0", "perf1"):
         return "mmcm_clb" if rel_y == 0 else "unused"
+    if MODE in ("mmcm0", "mmcm1", "mmcm2", "mmcm3"):
+        want = int(MODE[-1])
+        return "mmcm_clb" if REL_Y_TO_BUFRCLK[rel_y] == want else "unused"
     raise SystemExit("unknown FUZZ_MODE={}".format(MODE))
 
 
-def ibuf_block(site, idx, ioclk):
+def ibuf_block(site, idx, ioclk, iostd):
     return """
     wire {ioclk};
     (* KEEP, DONT_TOUCH, LOC="{site}" *)
@@ -154,7 +210,7 @@ def ibuf_block(site, idx, ioclk):
         .I(clks[{idx}]),
         .O({ioclk})
     );
-""".format(ioclk=ioclk, site=site, idx=idx, iost=IOSTANDARD)
+""".format(ioclk=ioclk, site=site, idx=idx, iost=iostd)
 
 
 def mmcm_block(name, clkin, site):
@@ -174,7 +230,7 @@ def mmcm_block(name, clkin, site):
 """.format(n=name, clkin=clkin, site=site)
 
 
-def bufr_block(site, src, consume, oddr_site=None, out_idx=0):
+def bufr_block(site, src, consume, oddr_site=None, out_idx=0, oddr_iostd=None):
     head = """
     wire {site}_o;
     (* KEEP, DONT_TOUCH, LOC="{site}" *)
@@ -193,8 +249,9 @@ def bufr_block(site, src, consume, oddr_site=None, out_idx=0):
         .R(1'b0), .S(1'b0), .Q({site}_q)
     );
     (* KEEP, DONT_TOUCH, LOC="{obuf}" *)
-    OBUF #(.IOSTANDARD("LVCMOS33")) obuf_{site} (.I({site}_q), .O(outs[{idx}]));
-""".format(site=site, obuf=oddr_site, idx=out_idx)
+    OBUF #(.IOSTANDARD("{iost}")) obuf_{site} (.I({site}_q), .O(outs[{idx}]));
+""".format(site=site, obuf=oddr_site, idx=out_idx,
+           iost=oddr_iostd or IOSTANDARD)
     # unconsumed: still drive O so the primitive exists, but no sink
     return """
     (* KEEP, DONT_TOUCH, LOC="{site}" *)
@@ -268,12 +325,12 @@ def main():
         sys.stderr.write("no HCLK_IOI3 tiles\n")
         sys.exit(1)
 
-    for tile, x_min, y_min, bufr_sites, iobs_m, iobs_s, region, mmcm_site in tiles:
+    for tile, x_min, y_min, bufr_sites, iobs_m, iobs_s, region, mmcm_site, iostd in tiles:
         ioclks = []
         for iob in iobs_m:
             ioclk = "clk_{}".format(iob.replace("/", "_"))
             ioclks.append(ioclk)
-            outputs.append(ibuf_block(iob, num_clocks, ioclk))
+            outputs.append(ibuf_block(iob, num_clocks, ioclk, iostd[iob]))
             num_clocks += 1
         if not ioclks:
             continue
@@ -301,6 +358,14 @@ def main():
             src = ioclks[rel_y % len(ioclks)]
             if state.startswith("mmcm"):
                 if mmcm_site is None:
+                    # FUZZ_SIDE drops the other column's MMCM. Leaving the
+                    # BUFR unused keeps that column's PERFCLK tags at zero
+                    # instead of substituting a pad-fed clock.
+                    if SIDE:
+                        rec["state"] = "unused"
+                        rec["skipped_side"] = 1
+                        params.append(rec)
+                        continue
                     state = "pad_clb"
                     rec["state"] = state
                 else:
@@ -309,9 +374,12 @@ def main():
                         mmcm_declared = True
                     if MODE in ("perf0", "perf1"):
                         src = "{}_out{}".format(mmcm_name, clkout_for_mode)
+                    elif MODE in ("mmcm0", "mmcm1", "mmcm2", "mmcm3"):
+                        src = "{}_out{}".format(mmcm_name, int(MODE[-1]))
                     else:
                         src = "{}_out{}".format(mmcm_name, rel_y % 4)
                     rec["source"] = "mmcm"
+                    rec["mmcm_site"] = mmcm_site
             else:
                 rec["source"] = "pad"
 
@@ -331,7 +399,8 @@ def main():
                     outputs.append(bufr_block(site, src, "open"))
                 else:
                     ob = iobs_s[num_outs % len(iobs_s)]
-                    outputs.append(bufr_block(site, src, "oddr", ob, num_outs))
+                    outputs.append(bufr_block(
+                        site, src, "oddr", ob, num_outs, iostd.get(ob, IOSTANDARD)))
                     num_outs += 1
             elif state == "pad_open":
                 rec["sink"] = "open"
@@ -365,8 +434,9 @@ def main():
 
     with open("params.json", "w") as f:
         json.dump(params, f, indent=2)
-    sys.stderr.write("MODE={} clocks={} bufr_used={}\n".format(
-        MODE, num_clocks, sum(1 for p in params if p.get("IN_USE"))))
+    sys.stderr.write("MODE={} SIDE={} clocks={} bufr_used={}\n".format(
+        MODE, SIDE or "-", num_clocks,
+        sum(1 for p in params if p.get("IN_USE"))))
 
 
 if __name__ == "__main__":

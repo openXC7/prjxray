@@ -24,6 +24,17 @@ FIXED := \
 SPECIMENS := $(RAND) $(FIXED)
 SPECIMENS_OK := $(addsuffix /OK,$(SPECIMENS))
 
+# Forced-column population.  Not part of the default `make database`:
+# that run stays the mixed one above.  `make database-sides` builds
+# SIDE_N randomised specimens on each CMT column plus one mmcm-fed
+# one-hot specimen per BUFRCLK index per column.
+SIDE_N ?= 32
+SIDE_SEQ := $(shell seq -f '%03.0f' $(SIDE_N))
+SIDE_SPECIMENS := \
+	$(foreach sd,L R, \
+		$(addprefix build/specimen_$(sd)_,$(SIDE_SEQ)) \
+		$(foreach n,0 1 2 3,build/specimen_cal$(sd)$(n)))
+
 all: database
 
 $(SPECIMENS_OK):
@@ -40,6 +51,9 @@ SEGMATCH_PIP = ${XRAY_SEGMATCH} -c 2
 TILES := hclk_l hclk_r hclk_cmt hclk_cmt_l cmt_top_r_lower_b cmt_top_l_lower_b
 
 database: $(addprefix build/segbits_,$(addsuffix .db,$(TILES)))
+
+database-sides:
+	$(MAKE) database SPECIMENS="$(SIDE_SPECIMENS)"
 
 build/segbits_hclk_l.rdb: $(SPECIMENS_OK)
 	$(SEGMATCH_EN) -o $@ $(addsuffix /segdata_hclk_l.txt,$(SPECIMENS))
@@ -92,4 +106,4 @@ run:
 clean:
 	rm -rf build run.ok
 
-.PHONY: all database gate pushdb run clean
+.PHONY: all database database-sides gate pushdb run clean

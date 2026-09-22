@@ -37,6 +37,16 @@ case "$(basename "$SPECDIR")" in
     specimen_neg_unconsumed) export FUZZ_MODE=neg_unconsumed ;;
     specimen_perf0) export FUZZ_MODE=perf0 ;;
     specimen_perf1) export FUZZ_MODE=perf1 ;;
+    specimen_calL0) export FUZZ_SIDE=L; export FUZZ_MODE=mmcm0 ;;
+    specimen_calL1) export FUZZ_SIDE=L; export FUZZ_MODE=mmcm1 ;;
+    specimen_calL2) export FUZZ_SIDE=L; export FUZZ_MODE=mmcm2 ;;
+    specimen_calL3) export FUZZ_SIDE=L; export FUZZ_MODE=mmcm3 ;;
+    specimen_calR0) export FUZZ_SIDE=R; export FUZZ_MODE=mmcm0 ;;
+    specimen_calR1) export FUZZ_SIDE=R; export FUZZ_MODE=mmcm1 ;;
+    specimen_calR2) export FUZZ_SIDE=R; export FUZZ_MODE=mmcm2 ;;
+    specimen_calR3) export FUZZ_SIDE=R; export FUZZ_MODE=mmcm3 ;;
+    specimen_L_*) export FUZZ_SIDE=L; export FUZZ_MODE=campaign ;;
+    specimen_R_*) export FUZZ_SIDE=R; export FUZZ_MODE=campaign ;;
     *) export FUZZ_MODE="${FUZZ_MODE:-campaign}" ;;
 esac
 
