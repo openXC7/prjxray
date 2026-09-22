@@ -68,6 +68,28 @@ Vivado can be pushed onto a `CLK_PERF0` position, and on xc7a100t it
 cannot — it routes `CLKOUTn -> CLK_PERF3 -> MUXED3 -> PERFCLK3` whatever
 output is asked for.
 
+## Both CMT columns
+
+`FUZZ_SIDE=L` or `FUZZ_SIDE=R` keeps the MMCM on that column.
+`L` is `CMT_TOP_L_LOWER_B` / `HCLK_CMT_L`, `R` is `CMT_TOP_R_LOWER_B` /
+`HCLK_CMT`. Unset, each clock region still uses its own single MMCM.
+
+Kintex-7's second column places its BUFRs in `HCLK_IOI` over an HP
+`IOI` / `IOB18` bank, not in `HCLK_IOI3`. Those tiles are walked with
+the same four neighbour offsets, and the IBUF/OBUF on an `IOB18` uses
+`LVCMOS18`. A specimen forced onto one column does not substitute a
+pad-fed BUFR on the other column: that BUFR stays unused, so the other
+column's `PERFCLK` tags stay zero.
+
+`make database-sides` (default `SIDE_N=32`) builds, per column, 32
+randomised specimens plus `specimen_calL0`..`calL3` and
+`specimen_calR0`..`calR3`. Each `cal` specimen is `mmcmN`: only
+BUFRCLK index N, fed by `CLKOUTN`. With `FUZZ_SIDE` set, a randomised
+specimen picks `mmcm_clb` three times out of four (the other draw is
+`unused`) so the column under test is actually driven; `CLKOUT` is
+still `rel_y % 4`. The default `make database` specimen list, and the
+mix used when `FUZZ_SIDE` is unset, are unchanged.
+
 ## Thresholds
 
 `-c 5` for the one-bit enables, as 039 and 058 use for the rest of the
