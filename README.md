@@ -304,7 +304,6 @@ The work spans four sibling branches on the openXC7 GitHub:
   - `INT_L.IOB_COL_OBUF_CASCADE_Y1` (3 bits, Y1 OBUF column carry)
   - `INT_L.IOB_COL_BANK_ACTIVE` (3 bits, bank-active marker)
   - `INT_L.GFAN_TIE_ROOT_GLUE` (1 bit, OBUF T-tie GND routing)
-  - `HCLK_L.HCLK_LEAF_BUFRCLK3_ACTIVE` (1 bit, BUFR clock leaf)
   - Plus 14 silicon-default bits added as IOB18 `default` entries (`PUDC_B`
     cascade, DCI cascade, slew/drive defaults Vivado emits unconditionally).
 - **`utils/fasm2frames.py` bank-glue auto-inject** — direction-aware
@@ -392,10 +391,18 @@ nextpnr-xilinx assumptions that broke at scale.
   - Heuristic gotcha: our first cut classified OBUFs by `.SLEW.`; that gave
     false positives because Vivado emits `SLEW.SLOW` on default-state IBUFs
     too. The reliable OBUF marker is `.DRIVE.`.
-- **`HCLK_L.HCLK_LEAF_BUFRCLK3_ACTIVE`** — a one-bit "this BUFR leaf is
-  live" marker that Vivado sets when a BUFR is the source for a clock
-  region. Required for the `counter_bufr` 200 MHz LVDS clocking path; we
-  inject it whenever the FASM stream mentions any BUFR feature.
+- **`HCLK_L.ENABLE_BUFFER.HCLK_CK_BUFRCLK0..3`** — the regional-clock
+  enable buffers, one bit each. nextpnr-xilinx gathers every used
+  `HCLK_CK_*` wire but emits only the `BUFHCLK` ones
+  (`himbaechel/uarch/xilinx/fasm.cc`), so these never reach the FASM;
+  `fasm2frames.py` injects them for each BUFR channel the stream uses.
+  Measured by fuzzer `039a-hclk-bufrclk-perfclk` on `xc7vx485tffg1761-2`:
+  `00_23`, `01_23`, `00_31`, `01_31` — the same bits artix7, kintex7,
+  spartan7 and zynq7 carry. They are **not** consecutive in minor 1.
+  This replaces the earlier hand-made `HCLK_L.HCLK_LEAF_BUFRCLK3_ACTIVE`
+  row, which named the same bit (`01_31`) as a local feature and whose
+  "minor 1 bit 28+ch" rule was right only for channel 3.
+
 - **`INT_L.GFAN_TIE_ROOT_GLUE`** — OBUF `T` (tristate) input must be tied
   to GND for non-tristate use. Vivado routes that GND from the **next
   INT_L row up** via the `GFAN0.GND_WIRE` pseudo-pip; the routing-graph

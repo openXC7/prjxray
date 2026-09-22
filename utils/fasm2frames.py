@@ -520,12 +520,15 @@ def run(
             for line in fasm.parse_fasm_string(feature):
                 assembler.add_fasm_line(line, glue_missing)
 
-        # HCLK_L per-BUFRCLK-channel "active" markers. Empirically Vivado
-        # sets one extra bit per HCLK_L tile per BUFR channel in use, at
-        # minor 1 bit 28+ch. Only BUFRCLK3 is observed today (the
-        # counter_sw_bufr design); when a kintex7 → virtex7 comparison
-        # design that uses BUFRCLK0/1/2 is built we can add those analogues
-        # to segbits_hclk_l.db with bits 01_28 / 01_29 / 01_30 respectively.
+        # HCLK_L regional-clock enable buffers. nextpnr-xilinx collects
+        # every used HCLK_CK_* wire but only emits the BUFHCLK ones
+        # (himbaechel/uarch/xilinx/fasm.cc), so the BUFRCLK enables never
+        # reach the FASM. Inject them here until it does.
+        #
+        # The bits are measured by fuzzer 039a-hclk-bufrclk-perfclk and are
+        # NOT consecutive in minor 1: BUFRCLK0..3 are 00_23, 01_23, 00_31,
+        # 01_31. An earlier rule here assumed "minor 1 bit 28+ch", which is
+        # right only for BUFRCLK3 (01_31) and wrong for the other three.
         hclkl_bufrclk_seen = {}  # (hclkl_tile) -> set of channel-ids in use
         for set_feature in set_features:
             if set_feature.value == 0:
@@ -546,11 +549,8 @@ def run(
 
         for hclkl_tile, channels in hclkl_bufrclk_seen.items():
             for ch in channels:
-                if ch != 3:
-                    # Only BUFRCLK3 has segbits data so far; skip rest
-                    # silently so the partial rule doesn't error.
-                    continue
-                feature = '{}.HCLK_LEAF_BUFRCLK{}_ACTIVE'.format(hclkl_tile, ch)
+                feature = '{}.ENABLE_BUFFER.HCLK_CK_BUFRCLK{}'.format(
+                    hclkl_tile, ch)
                 for line in fasm.parse_fasm_string(feature):
                     assembler.add_fasm_line(line, glue_missing)
 
