@@ -136,7 +136,12 @@ proc dump {} {
     set other_site_types [list ISERDESE2 OSERDESE2]
     foreach site_type $other_site_types {
         set cell [create_cell -reference $site_type test]
-        place_design
+        # A floating OSERDESE2 is not placed by the IO placer on virtex7 HP
+        # banks (Place 30-1114); fall back to an explicit IOLOGIC site.
+        if {[catch {place_design}]} {
+            set site [lindex [get_sites -filter "SITE_TYPE == [string map {SERDESE2 LOGICE2} $site_type]" -quiet] 0]
+            place_cell $cell $site
+        }
         set tile [get_tiles -of [get_sites -of $cell]]
         dump_tile_timings $tile $timing_fp $property_fp $pins_fp $tile_pins_fp
         unplace_cell $cell
