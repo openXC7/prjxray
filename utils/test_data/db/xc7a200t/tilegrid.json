@@ -251,5 +251,46 @@
         },
         "prohibited_sites": [],
         "type": "HCLK_IOI3"
+    },
+    "LIOB18_X1Y10": {
+        "bits": {
+            "CLB_IO_CLK": {
+                "baseaddr": "0x00421000",
+                "frames": 42,
+                "offset": 18,
+                "words": 4
+            }
+        },
+        "grid_x": 81,
+        "grid_y": 354,
+        "pin_functions": {
+            "IOB_X0Y10": "IO_L20P_T3_13",
+            "IOB_X0Y9": "IO_L20N_T3_13"
+        },
+        "sites": {
+            "IOB_X0Y10": "IOB18M",
+            "IOB_X0Y9": "IOB18S"
+        },
+        "prohibited_sites": [],
+        "type": "LIOB18"
+    },
+    "LIOI_X2Y10": {
+        "bits": {
+            "CLB_IO_CLK": {
+                "baseaddr": "0x00421000",
+                "frames": 42,
+                "offset": 18,
+                "words": 4
+            }
+        },
+        "grid_x": 82,
+        "grid_y": 354,
+        "pin_functions": {},
+        "sites": {
+            "OLOGIC_X0Y10": "OLOGICE2",
+            "OLOGIC_X0Y9": "OLOGICE2"
+        },
+        "prohibited_sites": [],
+        "type": "LIOI"
     }
 }

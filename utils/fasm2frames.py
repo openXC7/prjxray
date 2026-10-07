@@ -23,6 +23,7 @@ from collections import defaultdict
 
 from prjxray import fasm_assembler, util
 from prjxray.db import Database
+from prjxray.grid_types import GridLoc
 from prjxray.roi import Roi
 from prjxray.util import OpenSafeFile
 
@@ -440,6 +441,41 @@ def run(
             if ".DRIVE." in tag:
                 liob_in_features[(tile, site)]['out'] = True
 
+        # The three bits of OBUF_HP_BANK_GLUE are not the IOB's: they are
+        # OQUSED, OMUX.D1 and OSERDES.DATA_RATE_TQ.BUF of the OLOGIC in the IOI
+        # tile beside it (the two tiles share their frames), which is how an
+        # OLOGIC is set when it passes the fabric signal through to the pad.
+        # When that OLOGIC holds a cell -- an ODDR or an OSERDES, on the data or
+        # on the tristate -- the FASM configures it already, and the glue would
+        # add OMUX.D1, driving the pad from D1 around the register, and
+        # DATA_RATE_TQ.BUF, which conflicts with a registered tristate's
+        # DATA_RATE_TQ.DDR.  So a half whose OLOGIC has any feature beyond that
+        # pass-through and ZINV_T1 (the tristate passing through) gets no glue.
+        ologic_pass_through = (
+            'OQUSED', 'OMUX.D1', 'OSERDES.DATA_RATE_TQ.BUF', 'ZINV_T1')
+        configured_ologics = set()
+        for set_feature in set_features:
+            if set_feature.value == 0:
+                continue
+            parts = set_feature.feature.split(".")
+            if len(parts) < 3 or not parts[1].startswith("OLOGIC_Y"):
+                continue
+            if ".".join(parts[2:]) in ologic_pass_through:
+                continue
+            configured_ologics.add((parts[0], parts[1]))
+
+        grid = db.grid()
+
+        def ologic_beside(tile, site):
+            # The IOI tile is the IOB tile's neighbour on the fabric side, in
+            # the same grid row, and IOB_Yn pairs with OLOGIC_Yn.
+            loc = grid.loc_of_tilename(tile)
+            step = 1 if tile.startswith("LIOB18") else -1
+            ioi_loc = GridLoc(loc.grid_x + step, loc.grid_y)
+            if not grid.is_populated(ioi_loc):
+                return None
+            return grid.tilename_at_loc(ioi_loc), "OLOGIC_Y" + site[-1]
+
         # Track whether the col-32 LIOB18 column has any Y1 OBUFs anywhere.
         # When it does, Vivado lights a 6-bit "DCI cascade + bank active"
         # pattern in INT_L_X32Y49 — the bottom-most INT_L tile of the X32
@@ -466,7 +502,8 @@ def run(
                 feature = "{}.{}.IBUF_HP_BANK_GLUE".format(tile, site)
                 for line in fasm.parse_fasm_string(feature):
                     assembler.add_fasm_line(line, glue_missing)
-            if kind['out']:
+            if kind['out'] and ologic_beside(tile,
+                                             site) not in configured_ologics:
                 feature = "{}.{}.OBUF_HP_BANK_GLUE".format(tile, site)
                 for line in fasm.parse_fasm_string(feature):
                     assembler.add_fasm_line(line, glue_missing)

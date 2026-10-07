@@ -186,6 +186,56 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
         self.bitread_frm_equals(
             'iob/riob_stepdown.fasm', 'iob/riob_stepdown.bits')
 
+    # LIOB18_X1Y10 and LIOI_X2Y10 are grid neighbours sharing baseaddr
+    # 0x00421000, offset 18 (the frames of virtex7's LIOB18_X81Y10 and
+    # LIOI_X82Y10, renamed so the X81 column's own glue rule stays out).
+    # OBUF_HP_BANK_GLUE of IOB_Y1 is OLOGIC_Y1's OQUSED (30_41), OMUX.D1
+    # (32_16) and OSERDES.DATA_RATE_TQ.BUF (33_61).
+    HP_DRIVE = 'LIOB18_X1Y10.IOB_Y1.LVCMOS15_LVCMOS18.DRIVE.I12_I16_I2_I4_I6_I8\n'
+    HP_OQUSED = (0x0042101e, 19, 9)
+    HP_OMUX_D1 = (0x00421020, 18, 16)
+    HP_TQ_BUF = (0x00421021, 19, 29)
+    HP_TQ_DDR = (0x00421021, 19, 25)
+
+    def test_hp_glue_pass_through(self):
+        '''An HP output with no OLOGIC cell gets OBUF_HP_BANK_GLUE'''
+        bits = frm2bits(self.fasm2frames(self.HP_DRIVE))
+        for bit in (self.HP_OQUSED, self.HP_OMUX_D1, self.HP_TQ_BUF):
+            self.assertIn(bit, bits)
+
+        # ZINV_T1 is the one pass-through feature that sets none of the glue
+        # bits, so here they can only come from the glue.
+        bits = frm2bits(
+            self.fasm2frames(
+                self.HP_DRIVE + 'LIOI_X2Y10.OLOGIC_Y1.ZINV_T1\n'))
+        for bit in (self.HP_OQUSED, self.HP_OMUX_D1, self.HP_TQ_BUF):
+            self.assertIn(bit, bits)
+
+    def test_hp_glue_oddr_on_tristate(self):
+        '''An ODDR on T: the glue's DATA_RATE_TQ.BUF must not be injected'''
+        bits = frm2bits(
+            self.fasm2frames(
+                self.HP_DRIVE + 'LIOI_X2Y10.OLOGIC_Y1.OQUSED\n'
+                'LIOI_X2Y10.OLOGIC_Y1.OMUX.D1\n'
+                'LIOI_X2Y10.OLOGIC_Y1.OSERDES.DATA_RATE_TQ.DDR\n'
+                'LIOI_X2Y10.OLOGIC_Y1.OSERDES.TSRTYPE.SYNC\n'
+                'LIOI_X2Y10.OLOGIC_Y1.ZINIT_TQ\n'
+                'LIOI_X2Y10.OLOGIC_Y1.ZINV_T2\n'))
+        self.assertIn(self.HP_TQ_DDR, bits)
+        self.assertNotIn(self.HP_TQ_BUF, bits)
+
+    def test_hp_glue_oddr_on_data(self):
+        '''An ODDR on the data: the glue's OMUX.D1 must not be injected'''
+        bits = frm2bits(
+            self.fasm2frames(
+                self.HP_DRIVE + 'LIOI_X2Y10.OLOGIC_Y1.ODDR_TDDR.IN_USE\n'
+                'LIOI_X2Y10.OLOGIC_Y1.OQUSED\n'
+                'LIOI_X2Y10.OLOGIC_Y1.OSERDES.DATA_RATE_OQ.DDR\n'
+                'LIOI_X2Y10.OLOGIC_Y1.OSERDES.DATA_RATE_TQ.BUF\n'
+                'LIOI_X2Y10.OLOGIC_Y1.ZINV_CLK\n'))
+        self.assertIn(self.HP_OQUSED, bits)
+        self.assertNotIn(self.HP_OMUX_D1, bits)
+
 
 if __name__ == '__main__':
     unittest.main()
