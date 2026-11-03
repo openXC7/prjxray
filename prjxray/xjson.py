@@ -46,11 +46,12 @@ def sort(data):
     ...    't5': ['a1b5', 'a2b1', 'a1b1'],
     ... })
     >>> for t in o:
-    ...    print(t+':', o[t])
+    ...    v = o[t]
+    ...    print(t+':', list(v.items()) if isinstance(v, dict) else v)
     t1: ('b', 'c')
     t2: ('a2', 'a10', 'e')
     t3: (5, 3, 2)
-    t4: OrderedDict([('a2', ('c1', 'c2', 'c0', 'c10')), ('a4', ('b2', 'b3'))])
+    t4: [('a2', ('c1', 'c2', 'c0', 'c10')), ('a4', ('b2', 'b3'))]
     t5: ('a1b5', 'a2b1', 'a1b1')
 
     Don't mangle "pairs"
