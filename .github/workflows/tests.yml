@@ -30,7 +30,7 @@ jobs:
             libtinfo6
 
       - name: Build
-        run: make build --output-sync=target --warn-undefined-variables -j$(nproc)
+        run: make build --output-sync=target --warn-undefined-variables -j"$(nproc)"
 
       - name: Environment
         run: make env --output-sync=target --warn-undefined-variables
