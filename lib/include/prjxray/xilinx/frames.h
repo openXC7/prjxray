@@ -80,6 +80,18 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 	std::string frm_line;
 
 	while (std::getline(frm_file, frm_line)) {
+		// A cut that lands inside a line leaves no newline. A short
+		// prefix of a hex word is still a number, so the word count
+		// stays 101 and the short word is stored. A complete last
+		// line with the rest of the file missing looks finished.
+		const bool line_has_newline = !frm_file.eof();
+		if (!line_has_newline) {
+			std::cerr << "Frames file " << frm_file_str
+			          << " does not end with a newline"
+			          << std::endl;
+			return 1;
+		}
+
 		if (frm_line[0] == '#')
 			continue;
 
