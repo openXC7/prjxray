@@ -134,6 +134,15 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 		    std::pair<typename ArchType::FrameAddress, FrameData>(
 		        frm_addr, frame_data));
 	}
+
+	// std::getline stops on a read error as it does at the end of the
+	// file, so the frames read so far would make the bitstream.
+	const bool read_failed = frm_file.bad();
+	if (read_failed) {
+		std::cerr << "Frames file " << frm_file_str
+		          << " could not be read" << std::endl;
+		return 1;
+	}
 	return 0;
 }
 
