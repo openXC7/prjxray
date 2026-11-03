@@ -1,4 +1,4 @@
-http://github.com/SymbiFlow/sphinx_symbiflow_theme/archive/chips.zip#sphinx-symbiflow-theme
+https://github.com/f4pga/sphinx_f4pga_theme/archive/main.zip#sphinx-symbiflow-theme
 
 docutils
 sphinx
