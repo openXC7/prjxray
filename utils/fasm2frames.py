@@ -69,6 +69,10 @@ def dump_frames_sparse(frames):
 
 def dump_frm(f, frames):
     '''Write a .frm file given a list of frames, each containing a list of 101 32 bit words'''
+    if not frames:
+        # --sparse with nothing to set. An empty file is what a failed run
+        # leaves behind, and xc7frames2bit refuses it.
+        f.write('# no frames\n')
     for addr in sorted(frames.keys()):
         words = frames[addr]
         f.write(

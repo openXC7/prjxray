@@ -7,6 +7,8 @@
  *
  * SPDX-License-Identifier: ISC
  */
+#include <fstream>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -100,4 +102,43 @@ TEST(FramesTest, FindFramesNotInPart) {
 	frames.getFrames().erase(past_column_end);
 	frames.getFrames().erase(missing_row);
 	EXPECT_TRUE(frames.findFramesNotInPart(test_part).empty());
+}
+
+namespace {
+std::string WriteFramesFile(const std::string& name, const std::string& text) {
+	std::string path = testing::TempDir() + name;
+	std::ofstream(path) << text;
+	return path;
+}
+}  // namespace
+
+TEST(FramesTest, ReadFramesRefusesEmptyFile) {
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile("empty.frm", "")), 0);
+}
+
+TEST(FramesTest, ReadFramesRefusesShortFrame) {
+	// The last line of a file cut short.
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile(
+	              "short.frm", "0x00000000 0x00000001,0x00000002\n")),
+	          0);
+}
+
+TEST(FramesTest, ReadFramesAcceptsNoFrames) {
+	Frames<Series7> frames;
+	EXPECT_EQ(
+	    frames.readFrames(WriteFramesFile("none.frm", "# no frames\n")), 0);
+	EXPECT_TRUE(frames.getFrames().empty());
+}
+
+TEST(FramesTest, ReadFramesReadsFrame) {
+	std::string line = "0x00000002 0x00000001";
+	for (int i = 1; i < 101; i++) {
+		line += ",0x00000000";
+	}
+	Frames<Series7> frames;
+	EXPECT_EQ(frames.readFrames(WriteFramesFile("one.frm", line + "\n")),
+	          0);
+	EXPECT_EQ(frames.getFrames().size(), 1);
 }

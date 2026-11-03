@@ -66,6 +66,17 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 		          << std::endl;
 		return 1;
 	}
+
+	// A failed fasm2frames run leaves an empty file behind (a shell
+	// redirect creates it first). Taking it as "no frames" would give a
+	// blank bitstream.
+	const bool file_is_empty =
+	    frm_file.peek() == std::ifstream::traits_type::eof();
+	if (file_is_empty) {
+		std::cerr << "Frames file " << frm_file_str << " is empty"
+		          << std::endl;
+		return 1;
+	}
 	std::string frm_line;
 
 	while (std::getline(frm_file, frm_line)) {
@@ -91,7 +102,7 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 				    << frame_data_strings.size()
 				    << " words instead of "
 				    << ArchType::words_per_frame << std::endl;
-				continue;
+				return 1;
 			}
 		}
 

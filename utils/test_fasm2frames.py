@@ -118,6 +118,10 @@ class TestStringMethods(unittest.TestCase):
         '''Optional key with binary omitted value should produce valid result'''
         self.fasm2frames("CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX")
 
+    def test_sparse_no_frames(self):
+        '''With nothing to set, --sparse still writes a line'''
+        self.assertEqual(self.fasm2frames("", sparse=True), '# no frames\n')
+
     @unittest.skip
     def test_opkey_01_1(self):
         self.fasm2frames("CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1")
