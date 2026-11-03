@@ -66,9 +66,32 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 		          << std::endl;
 		return 1;
 	}
+
+	// A failed fasm2frames run leaves an empty file behind (a shell
+	// redirect creates it first). Taking it as "no frames" would give a
+	// blank bitstream.
+	const bool file_is_empty =
+	    frm_file.peek() == std::ifstream::traits_type::eof();
+	if (file_is_empty) {
+		std::cerr << "Frames file " << frm_file_str << " is empty"
+		          << std::endl;
+		return 1;
+	}
 	std::string frm_line;
 
 	while (std::getline(frm_file, frm_line)) {
+		// A cut that lands inside a line leaves no newline. A short
+		// prefix of a hex word is still a number, so the word count
+		// stays 101 and the short word is stored. A complete last
+		// line with the rest of the file missing looks finished.
+		const bool line_has_newline = !frm_file.eof();
+		if (!line_has_newline) {
+			std::cerr << "Frames file " << frm_file_str
+			          << " does not end with a newline"
+			          << std::endl;
+			return 1;
+		}
+
 		if (frm_line[0] == '#')
 			continue;
 
@@ -91,7 +114,7 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 				    << frame_data_strings.size()
 				    << " words instead of "
 				    << ArchType::words_per_frame << std::endl;
-				continue;
+				return 1;
 			}
 		}
 
@@ -110,6 +133,15 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 		frames_data_.insert(
 		    std::pair<typename ArchType::FrameAddress, FrameData>(
 		        frm_addr, frame_data));
+	}
+
+	// std::getline stops on a read error as it does at the end of the
+	// file, so the frames read so far would make the bitstream.
+	const bool read_failed = frm_file.bad();
+	if (read_failed) {
+		std::cerr << "Frames file " << frm_file_str
+		          << " could not be read" << std::endl;
+		return 1;
 	}
 	return 0;
 }

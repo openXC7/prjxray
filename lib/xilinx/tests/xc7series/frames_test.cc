@@ -7,12 +7,15 @@
  *
  * SPDX-License-Identifier: ISC
  */
+#include <fstream>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include <prjxray/xilinx/architectures.h>
 #include <prjxray/xilinx/frames.h>
+#include <prjxray/xilinx/xc7series/ecc.h>
 #include <prjxray/xilinx/xc7series/part.h>
 
 using namespace prjxray::xilinx;
@@ -100,4 +103,85 @@ TEST(FramesTest, FindFramesNotInPart) {
 	frames.getFrames().erase(past_column_end);
 	frames.getFrames().erase(missing_row);
 	EXPECT_TRUE(frames.findFramesNotInPart(test_part).empty());
+}
+
+namespace {
+std::string WriteFramesFile(const std::string& name, const std::string& text) {
+	std::string path = testing::TempDir() + name;
+	std::ofstream(path) << text;
+	return path;
+}
+}  // namespace
+
+TEST(FramesTest, ReadFramesRefusesEmptyFile) {
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile("empty.frm", "")), 0);
+}
+
+TEST(FramesTest, ReadFramesRefusesShortFrame) {
+	// The last line of a file cut short.
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile(
+	              "short.frm", "0x00000000 0x00000001,0x00000002\n")),
+	          0);
+}
+
+TEST(FramesTest, ReadFramesAcceptsNoFrames) {
+	Frames<Series7> frames;
+	EXPECT_EQ(
+	    frames.readFrames(WriteFramesFile("none.frm", "# no frames\n")), 0);
+	EXPECT_TRUE(frames.getFrames().empty());
+}
+
+TEST(FramesTest, ReadFramesReadsFrame) {
+	std::string line = "0x00000002 0x00000001";
+	for (int i = 1; i < 101; i++) {
+		line += ",0x00000000";
+	}
+	Frames<Series7> frames;
+	EXPECT_EQ(frames.readFrames(WriteFramesFile("one.frm", line + "\n")),
+	          0);
+	ASSERT_EQ(frames.getFrames().size(), 1);
+	EXPECT_EQ(static_cast<uint32_t>(frames.getFrames().begin()->first),
+	          static_cast<uint32_t>(2));
+
+	std::vector<uint32_t> raw(101, 0);
+	raw[0] = 1;
+	std::vector<uint32_t> with_ecc = raw;
+	xc7series::updateECC(with_ecc);
+	// updateECC rewrites the ECC word. The frame read back must carry it.
+	EXPECT_NE(with_ecc[0x32], raw[0x32]);
+	EXPECT_EQ(frames.getFrames().begin()->second, with_ecc);
+}
+
+TEST(FramesTest, ReadFramesRefusesMissingNewline) {
+	// 101 words, the newline cut off.
+	std::string line = "0x00000002 0x00000001";
+	for (int i = 1; i < 101; i++) {
+		line += ",0x00000000";
+	}
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile("nonewline.frm", line)), 0);
+}
+
+TEST(FramesTest, ReadFramesRefusesCutWord) {
+	// The last word cut down to a short hex prefix, and no newline.
+	std::string line = "0x00000002 0x00000001";
+	for (int i = 1; i < 100; i++) {
+		line += ",0x00000000";
+	}
+	line += ",0x0000";
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile("cutword.frm", line)), 0);
+}
+
+TEST(FramesTest, ReadFramesRefusesBarePrefix) {
+	// Cut inside the "0x" of the last word. Parsing that used to throw.
+	std::string line = "0x00000002 0x00000001";
+	for (int i = 1; i < 100; i++) {
+		line += ",0x00000000";
+	}
+	line += ",0x";
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile("bare.frm", line)), 0);
 }
