@@ -5,7 +5,7 @@
 # https://opensource.org/licenses/ISC
 #
 # SPDX-License-Identifier: ISC
-N = 24
+N = 26
 include ../fuzzer.mk
 
 database: build/segbits_cfg.rdb

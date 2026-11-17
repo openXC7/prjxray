@@ -27,7 +27,13 @@ import sys
 constant_bits = {
     "CFG_CENTER_MID.ALWAYS_ON_PROP1": "26_2206",
     "CFG_CENTER_MID.ALWAYS_ON_PROP2": "26_2207",
-    "CFG_CENTER_MID.ALWAYS_ON_PROP3": "27_2205"
+    "CFG_CENTER_MID.ALWAYS_ON_PROP3": "27_2205",
+    # These are the same three bits that are ICAP.IN_USE on the other
+    # families.  On Zynq every bitstream sets them, with or without an
+    # ICAPE2, so segmatch only ever sees a const1 and drops it.  Add the
+    # feature under its real name as well, so a FASM that writes IN_USE
+    # resolves against a Zynq database.
+    "CFG_CENTER_MID.ICAP.IN_USE": "26_2206 26_2207 27_2205"
 }
 
 with open(sys.argv[1], "a") as f:

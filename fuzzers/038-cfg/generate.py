@@ -29,6 +29,14 @@ def run():
     print("Loading tags")
     f = open('params.jl', 'r')
     design = json.load(f)
+
+    # The two no-ICAPE2 specimens make IN_USE solvable.  Every other specimen
+    # places the ICAPE2 at ICAP_X0Y1 (gen_sites() excludes ICAP_X0Y0).
+    icap_sites = [p["site"] for p in design if p["site_type"] in "ICAP"]
+    icap_present = bool(icap_sites)
+    icap_site = icap_sites[0] if icap_present else "ICAP_X0Y1"
+    segmk.add_site_tag(icap_site, "IN_USE", icap_present)
+
     for p in design:
         ps = p["params"]
         if p["site_type"] in "ICAP":
