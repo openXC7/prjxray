@@ -42,13 +42,23 @@ def write_csv_params(params):
     open('params.csv', 'w').write(pinstr)
 
 
+# Two specimens leave the ICAPE2 out entirely.  They give generate.py a
+# specimen where ICAP.IN_USE is 0; every other specimen instantiates one at
+# ICAP_X0Y1.  SEED is derived from the specimen directory name, so specimens
+# 1..24 keep the designs they had before these two were added.
+NO_ICAP_SPECIMENS = {25, 26}
+
+
 def generate_params():
     bscan_already_on = False
     icap_already_on = False
+    icap_present = int(os.getenv("SEEDN")) not in NO_ICAP_SPECIMENS
     tile_params = []
     for loci, (site, site_type) in enumerate(sorted(gen_sites())):
         p = {}
-        if site_type in "ICAP" and not icap_already_on:
+        wants_an_icap = (site_type in "ICAP" and not icap_already_on
+                         and icap_present)
+        if wants_an_icap:
             p["ICAP_WIDTH"] = verilog.quote(
                 random.choice(["X32", "X8", "X16"]))
         elif site_type in "BSCAN" and not bscan_already_on:
