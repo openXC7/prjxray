@@ -26,15 +26,14 @@ import tempfile
 
 def bit_to_bits(bitread, part_yaml, bit_file, bits_file, frame_range=None):
     """ Calls bitread to create bits (ASCII) from bit file (binary) """
+    # Pass the arguments as a list, without a shell, so that paths with
+    # spaces or shell metacharacters reach bitread unchanged.
+    cmd = [bitread, '--part_file', part_yaml]
     if frame_range:
-        frame_range_arg = '-F {}'.format(frame_range)
-    else:
-        frame_range_arg = ''
+        cmd += ['-F', frame_range]
+    cmd += ['-o', bits_file, '-z', '-y', bit_file]
 
-    subprocess.check_output(
-        '{} --part_file {} {} -o {} -z -y {}'.format(
-            bitread, part_yaml, frame_range_arg, bits_file, bit_file),
-        shell=True)
+    subprocess.check_output(cmd)
 
 
 def bits_to_fasm(db_root, part, bits_file, verbose, canonical):
