@@ -94,7 +94,9 @@ struct BitstreamPatcher {
 		auto bitstream_config =
 		    xilinx::Configuration<ArchType>::InitWithPackets(
 		        *part, *bitstream_reader);
-		if (!bitstream_config) {
+		if (!bitstream_config.ok()) {
+			std::cerr << bitstream_config.status().message()
+			          << std::endl;
 			std::cerr
 			    << "Bitstream does not appear to be for this part"
 			    << std::endl;

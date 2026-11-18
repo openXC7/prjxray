@@ -10,9 +10,14 @@
 #ifndef PRJXRAY_LIB_XILINX_CONFIGURATION_H_
 #define PRJXRAY_LIB_XILINX_CONFIGURATION_H_
 
+#include <cstdint>
+#include <iomanip>
 #include <map>
+#include <sstream>
 #include <type_traits>
 
+#include <absl/status/status.h>
+#include <absl/status/statusor.h>
 #include <absl/types/span.h>
 
 #include <prjxray/bit_ops.h>
@@ -22,6 +27,17 @@
 namespace prjxray {
 namespace xilinx {
 
+// The error InitWithPackets returns when a bitstream is for another part.
+inline absl::Status IdcodeMismatchError(uint32_t bitstream_idcode,
+                                        uint32_t part_idcode) {
+	std::ostringstream message;
+	message << std::hex << std::setfill('0') << "Bitstream IDCODE 0x"
+	        << std::setw(8) << bitstream_idcode
+	        << " does not match the part's IDCODE 0x" << std::setw(8)
+	        << part_idcode;
+	return absl::InvalidArgumentError(message.str());
+}
+
 template <typename ArchType>
 class Configuration {
        public:
@@ -30,9 +46,10 @@ class Configuration {
 	using PacketData = std::vector<uint32_t>;
 
 	// Returns a configuration, i.e. collection of frame addresses
-	// and corresponding data from a collection of configuration packets.
+	// and corresponding data from a collection of configuration packets,
+	// or an error if the packets are not for this part.
 	template <typename Collection>
-	static absl::optional<Configuration<ArchType>> InitWithPackets(
+	static absl::StatusOr<Configuration<ArchType>> InitWithPackets(
 	    const typename ArchType::Part& part,
 	    Collection& packets);
 
@@ -144,7 +161,7 @@ Configuration<ArchType>::createType2ConfigurationPacketData(
 
 template <>
 template <typename Collection>
-absl::optional<Configuration<Spartan6>>
+absl::StatusOr<Configuration<Spartan6>>
 Configuration<Spartan6>::InitWithPackets(const typename Spartan6::Part& part,
                                          Collection& packets) {
 	using ArchType = Spartan6;
@@ -199,7 +216,8 @@ Configuration<Spartan6>::InitWithPackets(const typename Spartan6::Part& part,
 				uint32_t idcode = (packet.data()[0] << 16) |
 				                  (packet.data()[1]);
 				if (idcode != part.idcode()) {
-					return {};
+					return IdcodeMismatchError(
+					    idcode, part.idcode());
 				}
 				break;
 			}
@@ -268,7 +286,7 @@ Configuration<Spartan6>::InitWithPackets(const typename Spartan6::Part& part,
 
 template <typename ArchType>
 template <typename Collection>
-absl::optional<Configuration<ArchType>>
+absl::StatusOr<Configuration<ArchType>>
 Configuration<ArchType>::InitWithPackets(const typename ArchType::Part& part,
                                          Collection& packets) {
 	// Registers that can be directly written to.
@@ -320,7 +338,8 @@ Configuration<ArchType>::InitWithPackets(const typename ArchType::Part& part,
 				// If the IDCODE doesn't match our expected
 				// part, consider the bitstream invalid.
 				if (packet.data()[0] != part.idcode()) {
-					return {};
+					return IdcodeMismatchError(
+					    packet.data()[0], part.idcode());
 				}
 				break;
 			case ArchType::ConfRegType::FAR:

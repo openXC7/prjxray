@@ -93,7 +93,8 @@ struct BitReader {
 		}
 		auto config = xilinx::Configuration<ArchType>::InitWithPackets(
 		    *part, *reader);
-		if (!config) {
+		if (!config.ok()) {
+			std::cerr << config.status().message() << std::endl;
 			std::cerr
 			    << "Bitstream does not appear to be for this part"
 			    << std::endl;
