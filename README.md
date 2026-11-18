@@ -289,7 +289,7 @@ The work spans four sibling branches on the openXC7 GitHub:
     `PicoSoC alive on VC707 @ 125 MHz`, LEDs walk a pattern.
 - **All four reference designs at 0/0 bit-difference** vs Vivado, with **zero
   `.frm` patches** — the bank-glue rules are now codified as DB entries plus
-  auto-inject in `utils/fasm2frames.py`.
+  auto-inject in `prjxray/fasm2frames.py`.
 - **Cross-family segbits/ppips transplant** from the openXC7
   [`prjxray-db`](https://github.com/openXC7/prjxray-db) Kintex-7 tree into
   `database/virtex7/`: ~39 381 segbits + ~12 273 ppips entries, plus targeted
@@ -307,7 +307,7 @@ The work spans four sibling branches on the openXC7 GitHub:
   - `HCLK_L.HCLK_LEAF_BUFRCLK3_ACTIVE` (1 bit, BUFR clock leaf)
   - Plus 14 silicon-default bits added as IOB18 `default` entries (`PUDC_B`
     cascade, DCI cascade, slew/drive defaults Vivado emits unconditionally).
-- **`utils/fasm2frames.py` bank-glue auto-inject** — direction-aware
+- **`prjxray/fasm2frames.py` bank-glue auto-inject** — direction-aware
   walk over the FASM stream classifies each LIOB18 site as input / output /
   diff-input from feature names (`IN_ONLY`, `.IN`, `IBUFDISABLE` → in;
   `.DRIVE.` → out; `IN_DIFF` → diff_in) and injects the matching glue
@@ -329,7 +329,7 @@ The work spans four sibling branches on the openXC7 GitHub:
   + cached `dst_wire_to_num_pips`. ~4× speed-up; on
   `xc7vx485tffg1761-2` cuts `041-clk-hrow-pips`/`045-hclk-cmt-pips` specimens
   from ~1.5 h to ~25 min each.
-- **`utils/fasm2frames.py` HP-bank fix** — was hard-coded to `HCLK_IOI3_*`
+- **`prjxray/fasm2frames.py` HP-bank fix** — was hard-coded to `HCLK_IOI3_*`
   tile prefix; now probes the grid for whichever of `HCLK_IOI_` / `HCLK_IOI3_`
   exists. STEPDOWN bank-anchor check widened accordingly.
 - **`utils/mergedb.sh` extended** with LIOI / LIOI_TBYTESRC / LIOI_TBYTETERM
