@@ -92,7 +92,8 @@ void AddType2(Spartan6::ConfigurationPackage& packets) {
 	// Type 2 packet with data
 	{
 		static std::vector<uint32_t> words;
-		words = MakeType2(0x02, 0x3, 12);
+		// 10 data words plus the 2 uncounted words that follow them.
+		words = MakeType2(0x02, 0x3, 10);
 		std::vector<uint32_t> payload{1, 2, 3, 4,  5,  6,
 		                              7, 8, 9, 10, 11, 12};
 		words.insert(words.end(), payload.begin(), payload.end());

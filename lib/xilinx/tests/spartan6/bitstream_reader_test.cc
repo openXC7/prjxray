@@ -113,11 +113,16 @@ TEST(BitstreamReaderTest, ParsesType2AfterType1Packet) {
 	    0x50, 0x60,  // Type 2 Write of 8 16-bit words
 	    0x00, 0x00,  // WC1 bits 31:16
 	    0x00, 0x08,  // WC2 bits 15:0
-	    0x1,  0x2,  0x3, 0x4, 0x5, 0x6, 0x7, 0x8,
-	    0x9,  0xA,  0xB, 0xC, 0xD, 0xE, 0xF, 0x10,
+	    0x1,  0x2,  0x3, 0x4, 0x5, 0x6, 0x7, 0x8,   // data
+	    0x9,  0xA,  0xB, 0xC, 0xD, 0xE, 0xF, 0x10,  // data
+	    0x12, 0x34,                                 // not in the word count
+	    0x56, 0x78,                                 // not in the word count
+	    0x20, 0x00,                                 // Type 1 NOP
 	};
+	// The packet's data keeps the 2 uncounted words.
 	std::vector<uint32_t> data_words{0x0102, 0x0304, 0x0506, 0x0708,
-	                                 0x090A, 0x0B0C, 0x0D0E, 0x0F10};
+	                                 0x090A, 0x0B0C, 0x0D0E, 0x0F10,
+	                                 0x1234, 0x5678};
 
 	auto reader = BitstreamReader<Spartan6>::InitWithBytes(bitstream);
 	ASSERT_TRUE(reader);
@@ -134,6 +139,41 @@ TEST(BitstreamReaderTest, ParsesType2AfterType1Packet) {
 	EXPECT_EQ(third_packet->opcode(),
 	          ConfigurationPacket<Spartan6>::Opcode::Write);
 	EXPECT_EQ(third_packet->address(), Spartan6::ConfRegType::FDRI);
-	(third_packet->data(), absl::Span<uint32_t>(data_words));
+	EXPECT_EQ(third_packet->data(), absl::Span<uint32_t>(data_words));
+
+	auto fourth_packet = ++first_packet;
+	ASSERT_NE(fourth_packet, reader->end());
+	EXPECT_EQ(fourth_packet->opcode(),
+	          ConfigurationPacket<Spartan6>::Opcode::NOP);
 	EXPECT_EQ(++first_packet, reader->end());
+}
+
+TEST(BitstreamReaderTest, Type2UncountedWordsAreNotParsedAsPackets) {
+	std::vector<uint8_t> bitstream{
+	    0xAA, 0x99,  // sync
+	    0x55, 0x66,  // sync
+	    0x28, 0x80,  // Type 1 Read zero bytes from FDRO
+	    0x50, 0x60,  // Type 2 Write FDRI
+	    0x00, 0x00,  // WC1 bits 31:16
+	    0x00, 0x02,  // WC2 bits 15:0
+	    0x11, 0x11,  // data
+	    0x22, 0x22,  // data
+	    0x30, 0xA1,  // not in the word count, looks like a CMD write
+	    0x00, 0x0D,  // not in the word count, looks like DESYNC
+	    0x20, 0x00,  // Type 1 NOP
+	};
+	auto reader = BitstreamReader<Spartan6>::InitWithBytes(bitstream);
+	ASSERT_TRUE(reader);
+
+	auto packet = reader->begin();
+	ASSERT_NE(packet, reader->end());
+	EXPECT_EQ(packet->opcode(),
+	          ConfigurationPacket<Spartan6>::Opcode::Read);
+	++packet;
+	ASSERT_NE(packet, reader->end());
+	EXPECT_EQ(packet->address(), Spartan6::ConfRegType::FDRI);
+	++packet;
+	ASSERT_NE(packet, reader->end());
+	EXPECT_EQ(packet->opcode(), ConfigurationPacket<Spartan6>::Opcode::NOP);
+	EXPECT_EQ(++packet, reader->end());
 }
