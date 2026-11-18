@@ -12,7 +12,7 @@ if(NOT CMAKE_BUILD_TYPE)
 		FORCE)
 endif()
 
-# Hack for missing option in cctz
+# Keep the vendored libraries from enabling CTest and their own tests.
 option(BUILD_TESTING "" OFF)
 
 if(PRJXRAY_BUILD_TESTING)
@@ -21,7 +21,6 @@ endif()
 
 add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
 add_subdirectory(third_party/gflags EXCLUDE_FROM_ALL)
-add_subdirectory(third_party/cctz EXCLUDE_FROM_ALL)
 add_subdirectory(third_party/abseil-cpp EXCLUDE_FROM_ALL)
 
 include(CheckCXXCompilerFlag)
