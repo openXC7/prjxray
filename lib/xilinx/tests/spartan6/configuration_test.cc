@@ -63,7 +63,7 @@ TEST(ConfigurationTest, ConstructFromPacketsWithSingleFrame) {
 
 	auto test_config =
 	    Configuration<Spartan6>::InitWithPackets(test_part, packets);
-	ASSERT_TRUE(test_config);
+	ASSERT_TRUE(test_config.ok());
 
 	EXPECT_EQ(test_config->part().idcode(), static_cast<uint32_t>(0x1234));
 	EXPECT_EQ(test_config->frames().size(), static_cast<size_t>(1));
@@ -117,7 +117,7 @@ TEST(ConfigurationTest, ConstructFromPacketsWithAutoincrement) {
 
 	auto test_config =
 	    Configuration<Spartan6>::InitWithPackets(test_part, packets);
-	ASSERT_TRUE(test_config);
+	ASSERT_TRUE(test_config.ok());
 
 	absl::Span<uint32_t> frame_span(frame);
 	EXPECT_EQ(test_config->part().idcode(), static_cast<uint32_t>(0x1234));

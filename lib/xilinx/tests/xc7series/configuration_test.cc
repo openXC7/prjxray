@@ -9,6 +9,7 @@
  */
 #include <cstdint>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include <absl/types/span.h>
@@ -65,11 +66,38 @@ TEST(ConfigurationTest, ConstructFromPacketsWithSingleFrame) {
 
 	auto test_config =
 	    Configuration<Series7>::InitWithPackets(test_part, packets);
-	ASSERT_TRUE(test_config);
+	ASSERT_TRUE(test_config.ok());
 
 	EXPECT_EQ(test_config->part().idcode(), static_cast<uint32_t>(0x1234));
 	EXPECT_EQ(test_config->frames().size(), static_cast<size_t>(1));
 	EXPECT_EQ(test_config->frames().at(0x4567), frame);
+}
+
+TEST(ConfigurationTest, IdcodeMismatchIsReturnedAsError) {
+	std::vector<Series7::FrameAddress> test_part_addresses{0x4567};
+	xc7series::Part test_part(0x1234, test_part_addresses);
+
+	std::vector<uint32_t> idcode{0x5678};
+	std::vector<ConfigurationPacket<Series7::ConfRegType>> packets{
+	    {
+	        static_cast<unsigned int>(0x1),
+	        ConfigurationPacket<Series7::ConfRegType>::Opcode::Write,
+	        Series7::ConfRegType::IDCODE,
+	        absl::MakeSpan(idcode),
+	    },
+	};
+
+	testing::internal::CaptureStderr();
+	auto test_config =
+	    Configuration<Series7>::InitWithPackets(test_part, packets);
+	EXPECT_EQ(testing::internal::GetCapturedStderr(), "");
+
+	ASSERT_FALSE(test_config.ok());
+	EXPECT_EQ(test_config.status().code(),
+	          absl::StatusCode::kInvalidArgument);
+	EXPECT_EQ(test_config.status().message(),
+	          "Bitstream IDCODE 0x00005678 does not match the part's "
+	          "IDCODE 0x00001234");
 }
 
 TEST(ConfigurationTest, ConstructFromPacketsWithAutoincrement) {
@@ -118,7 +146,7 @@ TEST(ConfigurationTest, ConstructFromPacketsWithAutoincrement) {
 
 	auto test_config =
 	    Configuration<Series7>::InitWithPackets(test_part, packets);
-	ASSERT_TRUE(test_config);
+	ASSERT_TRUE(test_config.ok());
 
 	absl::Span<uint32_t> frame_span(frame);
 	EXPECT_EQ(test_config->part().idcode(), static_cast<uint32_t>(0x1234));
@@ -144,7 +172,7 @@ TEST(ConfigurationTest,
 
 	auto debug_configuration =
 	    Configuration<Series7>::InitWithPackets(*part, *debug_reader);
-	ASSERT_TRUE(debug_configuration);
+	ASSERT_TRUE(debug_configuration.ok());
 
 	auto perframecrc_bitstream = prjxray::MemoryMappedFile::InitWithFile(
 	    "configuration_test.perframecrc.bit");
@@ -156,7 +184,7 @@ TEST(ConfigurationTest,
 
 	auto perframecrc_configuration =
 	    Configuration<Series7>::InitWithPackets(*part, *perframecrc_reader);
-	ASSERT_TRUE(perframecrc_configuration);
+	ASSERT_TRUE(perframecrc_configuration.ok());
 
 	for (auto debug_frame : debug_configuration->frames()) {
 		auto perframecrc_frame =
@@ -200,7 +228,7 @@ TEST(ConfigurationTest, DebugAndNormalBitstreamsProduceEqualConfigurations) {
 
 	auto debug_configuration =
 	    Configuration<Series7>::InitWithPackets(*part, *debug_reader);
-	ASSERT_TRUE(debug_configuration);
+	ASSERT_TRUE(debug_configuration.ok());
 
 	auto normal_bitstream =
 	    prjxray::MemoryMappedFile::InitWithFile("configuration_test.bit");
@@ -212,7 +240,7 @@ TEST(ConfigurationTest, DebugAndNormalBitstreamsProduceEqualConfigurations) {
 
 	auto normal_configuration =
 	    Configuration<Series7>::InitWithPackets(*part, *normal_reader);
-	ASSERT_TRUE(normal_configuration);
+	ASSERT_TRUE(normal_configuration.ok());
 
 	for (auto debug_frame : debug_configuration->frames()) {
 		auto normal_frame =

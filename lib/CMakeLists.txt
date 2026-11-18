@@ -25,6 +25,8 @@ add_library(libprjxray
 	xilinx/xc7series/configuration_column.cc
 	xilinx/xc7series/ecc.cc
 )
+# InitWithPackets returns absl::StatusOr.
+target_link_libraries(libprjxray absl::status absl::statusor)
 target_include_directories(libprjxray PUBLIC "include")
 target_link_libraries(libprjxray absl::optional absl::variant absl::strings absl::span absl::time yaml-cpp)
 
