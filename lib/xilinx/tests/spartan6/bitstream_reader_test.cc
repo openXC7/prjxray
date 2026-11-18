@@ -84,6 +84,27 @@ TEST(BitstreamReaderTest, ParseType2PacketWithoutType1Fails) {
 	EXPECT_EQ(reader->begin(), reader->end());
 }
 
+TEST(BitstreamReaderTest, ParseTruncatedType2PacketEnds) {
+	std::vector<uint8_t> bitstream{
+	    0xAA, 0x99,  // sync
+	    0x55, 0x66,  // sync
+	    0x28, 0x80,  // Type 1 Read zero bytes from FDRO
+	    0x50, 0x60,  // Type 2 Write of 8 16-bit words
+	    0x00, 0x00,  // WC1 bits 31:16
+	    0x00, 0x08,  // WC2 bits 15:0
+	    0x1,  0x2,  0x3, 0x4, 0x5, 0x6, 0x7,
+	    0x8,  0x9,  0xA, 0xB, 0xC, 0xD, 0xE,  // only 7 of the 8 words
+	};
+	auto reader = BitstreamReader<Spartan6>::InitWithBytes(bitstream);
+	ASSERT_TRUE(reader);
+	ASSERT_NE(reader->begin(), reader->end());
+
+	auto first_packet = reader->begin();
+	EXPECT_EQ(first_packet->opcode(),
+	          ConfigurationPacket<Spartan6>::Opcode::Read);
+	EXPECT_EQ(++first_packet, reader->end());
+}
+
 TEST(BitstreamReaderTest, ParsesType2AfterType1Packet) {
 	std::vector<uint8_t> bitstream{
 	    0xAA, 0x99,  // sync

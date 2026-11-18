@@ -72,11 +72,14 @@ ConfigurationPacket<Spartan6ConfigurationRegister>::InitWithWords(
 			// Type 2 packets according to UG380 consist of
 			// a header word followed by 2 WCD (Word Count Data)
 			// words
+			if (words.size() < 3) {
+				return {words, {}};
+			}
 			uint32_t data_word_count = (words[1] << 16) | words[2];
 
 			// If the full packet has not been received, return as
 			// though no valid packet was found.
-			if (data_word_count > words.size() - 1) {
+			if (data_word_count > words.size() - 3) {
 				return {words, {}};
 			}
 
