@@ -52,3 +52,31 @@ jobs:
             build/py_test_results.xml
             build/cpp_test_results.xml
             build/Testing/**/Test.xml
+
+  pip-install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Install the package the way users do, in a clean venv and without
+      # the repo root on PYTHONPATH, and check that the console script starts
+      # and prints its usage.
+      - name: Install with pip and run the console scripts
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          for mode in regular editable compat; do
+            python3 -m venv "venv-$mode"
+            case "$mode" in
+              regular) "venv-$mode/bin/pip" install "$GITHUB_WORKSPACE" ;;
+              editable) "venv-$mode/bin/pip" install -e "$GITHUB_WORKSPACE" ;;
+              compat) "venv-$mode/bin/pip" install -e "$GITHUB_WORKSPACE" \
+                  --config-settings editable_mode=compat ;;
+            esac
+            "venv-$mode/bin/fasm2frames" --help > "help-$mode.txt"
+            grep -q '^usage: fasm2frames' "help-$mode.txt"
+          done
