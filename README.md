@@ -48,7 +48,7 @@ shell that is then only used to run Vivado to avoid these problems.
 Clone the ``prjxray`` repository and its submodules:
 
 ```bash
-git clone git@github.com:f4pga/prjxray.git
+git clone git@github.com:openXC7/prjxray.git
 cd prjxray
 git submodule update --init --recursive
 ```

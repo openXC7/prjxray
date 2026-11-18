@@ -25,7 +25,7 @@ fixes for problems revealed during testing are
 Step 0
 ~~~~~~
 
-Fork a copy of https://github.com/SymbiFlow/prjxray on GitHub (go to the
+Fork a copy of https://github.com/openXC7/prjxray on GitHub (go to the
 page, click “Fork” button, select your own workspace).
 
 Clone your fork, and make a new branch, with a name related to the new

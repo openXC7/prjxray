@@ -68,7 +68,7 @@ if not on_rtd:
         "github_user": "openXC7",  # Username
         "github_repo": "prjxray",  # Repo name
         "github_version": "master",  # Version
-        "conf_py_path": "/doc/",
+        "conf_py_path": "/docs/",
     }
 else:
     docs_dir = os.path.abspath(os.path.dirname(__file__))
@@ -152,7 +152,7 @@ def setup(app):
     # Generate links for markdown-code-symlinks
     subprocess.check_call("make links", shell=True)
 
-    github_code_repo = 'https://github.com/f4pga/prjxray/'
+    github_code_repo = 'https://github.com/openXC7/prjxray/'
     github_code_branch = 'blob/master/'
 
     docs_root_dir = os.path.realpath(os.path.dirname(__file__))
