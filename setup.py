@@ -42,5 +42,8 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     entry_points={
-        'console_scripts': ['fasm2frames=prjxray.fasm2frames:main'],
+        'console_scripts': [
+            'bit2fasm=prjxray.bit2fasm:main',
+            'fasm2frames=prjxray.fasm2frames:main',
+        ],
     })
