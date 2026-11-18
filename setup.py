@@ -28,12 +28,14 @@ setuptools.setup(
         'fasm',
         'intervaltree',
         'numpy',
-        # FIXME: remove dependency once https://github.com/SymbiFlow/prjxray/issues/1624
-        #        is fixed
-        'pyjson5',
         'pyyaml',
         'simplejson',
     ],
+    extras_require={
+        # Only needed by the fuzzing-only node lookup code (prjxray.node_lookup
+        # and prjxray.lib.NodeLookup), see SymbiFlow/prjxray#1624.
+        'fuzzers': ['progressbar2', 'pyjson5'],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: ISC License",
