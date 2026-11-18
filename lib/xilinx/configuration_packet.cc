@@ -72,23 +72,31 @@ ConfigurationPacket<Spartan6ConfigurationRegister>::InitWithWords(
 			// Type 2 packets according to UG380 consist of
 			// a header word followed by 2 WCD (Word Count Data)
 			// words
+			if (words.size() < 3) {
+				return {words, {}};
+			}
 			uint32_t data_word_count = (words[1] << 16) | words[2];
 
+			// The data words are followed by 2 more words that
+			// the word count does not include (in ISE bitstreams
+			// they differ per design, like a CRC). The next
+			// packet starts after them.
+			//
 			// If the full packet has not been received, return as
 			// though no valid packet was found.
-			if (data_word_count > words.size() - 1) {
+			if (words.size() < 5 ||
+			    data_word_count > words.size() - 5) {
 				return {words, {}};
 			}
 
-			// Create a packet that contains as many data words
-			// as specified in the WCD packets, but omit them
-			// in the configuration packet along with the header
-			// FIXME Figure out why we need the extra 2 words
+			// Keep the 2 extra words in the packet's data, which
+			// is what the writer
+			// (createType2ConfigurationPacketData) expects.
 			packet = ConfigurationPacket(
 			    header_type, opcode, address,
 			    words.subspan(3, data_word_count + 2));
 
-			return {words.subspan(data_word_count + 3), packet};
+			return {words.subspan(data_word_count + 5), packet};
 		}
 		default:
 			return {{}, {}};

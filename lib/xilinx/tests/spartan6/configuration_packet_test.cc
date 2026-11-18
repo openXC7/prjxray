@@ -94,8 +94,9 @@ TEST(ConfigPacket, InitWithType1Write) {
 }
 
 TEST(ConfigPacket, InitWithType2WithPreviousPacket) {
+	// 10 data words plus the 2 uncounted words that follow them.
 	std::vector<uint32_t> words{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-	std::vector<uint32_t> type2 = MakeType2(0x01, 0x03, 12);
+	std::vector<uint32_t> type2 = MakeType2(0x01, 0x03, 10);
 	words.insert(words.begin(), type2.begin(), type2.end());
 	absl::Span<uint32_t> word_span(words);
 	auto packet = ConfigurationPacket<Spartan6::ConfRegType>::InitWithWords(
