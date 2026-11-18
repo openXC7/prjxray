@@ -18,7 +18,7 @@ set tile, an error will be generated.
 
 import argparse
 import prjxray.lib
-import prjxray.node_lookup
+from node_lookup import NodeLookup
 import datetime
 import subprocess
 import os.path
@@ -208,7 +208,7 @@ def get_sites(tile, site_pin_node_to_wires):
 
 
 def read_json5(fname, database_file):
-    node_lookup = prjxray.node_lookup.NodeLookup(database_file)
+    node_lookup = NodeLookup(database_file)
 
     with open(fname) as f:
         tile = json5.load(f)
@@ -450,9 +450,9 @@ def main():
     print('{} Loading node<->wire mapping'.format(datetime.datetime.now()))
     database_file = os.path.join(args.output_dir, 'nodes.db')
     if os.path.exists(database_file) and not args.ignore_cache:
-        node_lookup = prjxray.node_lookup.NodeLookup(database_file)
+        node_lookup = NodeLookup(database_file)
     else:
-        node_lookup = prjxray.node_lookup.NodeLookup(database_file)
+        node_lookup = NodeLookup(database_file)
         node_lookup.build_database(nodes=nodes, tiles=tiles)
 
     site_types = {}

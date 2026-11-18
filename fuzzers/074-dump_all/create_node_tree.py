@@ -17,6 +17,49 @@ import pickle
 import collections
 import json
 
+from prjxray.util import OpenSafeFile
+
+
+class NodeLookup(object):
+    def __init__(self):
+        self.nodes = {}
+
+    def load_from_nodes(self, nodes):
+        self.nodes = nodes
+
+    def load_from_root_csv(self, nodes):
+        import pyjson5 as json5
+        import progressbar
+        for node in progressbar.progressbar(nodes):
+            with OpenSafeFile(node) as f:
+                node_wires = json5.load(f)
+                assert node_wires['node'] not in self.nodes
+                self.nodes[node_wires['node']] = node_wires['wires']
+
+    def load_from_file(self, fname):
+        with OpenSafeFile(fname, 'rb') as f:
+            self.nodes = pickle.load(f)
+
+    def save_to_file(self, fname):
+        with OpenSafeFile(fname, 'wb') as f:
+            pickle.dump(self.nodes, f)
+
+    def site_pin_node_to_wires(self, tile, node):
+        if node is None:
+            return
+
+        node_wires = self.nodes[node]
+
+        for wire in node_wires:
+            if wire['wire'].startswith(tile + '/'):
+                yield wire['wire'][len(tile) + 1:]
+
+    def wires_for_tile(self, tile):
+        for node in self.nodes.values():
+            for wire in node:
+                if wire['wire'].startswith(tile + '/'):
+                    yield wire['wire'][len(tile) + 1:]
+
 
 def build_node_index(fname):
     node_index = {}
@@ -238,7 +281,7 @@ def main():
     tiles, nodes = prjxray.lib.read_root_csv(args.dump_all_root_dir)
 
     print('{} Loading node<->wire mapping'.format(datetime.datetime.now()))
-    node_lookup = prjxray.lib.NodeLookup()
+    node_lookup = NodeLookup()
     node_lookup_file = os.path.join(args.output_dir, 'nodes.pickle')
     if os.path.exists(node_lookup_file):
         node_lookup.load_from_file(node_lookup_file)
