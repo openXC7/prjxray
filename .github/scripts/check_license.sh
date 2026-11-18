@@ -46,7 +46,7 @@ function check_if_submodule {
 
 THIRD_PARTY_DIRS=""
 if [[ -e third_party ]]; then
-    THIRD_PARTY_DIRS=`ls third_party --ignore=reformat.tcl --ignore cctz --ignore gflags --ignore yosys `
+    THIRD_PARTY_DIRS=`ls third_party --ignore=reformat.tcl --ignore gflags --ignore yosys `
 fi
 ERROR_NO_LICENSE=""
 
