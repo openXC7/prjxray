@@ -13,7 +13,7 @@ bit-stream format of Xilinx 7-series FPGAs.
 > Status**](#virtex-7-port-status-virtex7-support-branch) below for the
 > `virtex7-support` branch — different Vivado version, working open flow
 > on `xc7vx485tffg1761-2`, and device-specific patches. The Quickstart
-> Guide that follows assumes the upstream Artix-7 / 2017.2 path.
+> Guide that follows assumes the Artix-7 path.
 
 More documentation can be found published on [prjxray ReadTheDocs site](https://prjxray.readthedocs.io/en/latest/) - this includes;
  * [Highlevel Bitstream Architecture](https://prjxray.readthedocs.io/en/latest/architecture/overview.html)
@@ -23,10 +23,15 @@ More documentation can be found published on [prjxray ReadTheDocs site](https://
 Instructions were originally written for Ubuntu 16.04. Please let us know if you have information on other distributions.
 
 ### Step 1: ###
-Install Vivado 2017.2. If you did not install to /opt/Xilinx default, then set the environment variable
-XRAY_VIVADO_SETTINGS to point to the settings64.sh file of the installed vivado version, ie
+Install Vivado. By default `utils/environment.sh` expects **Vivado 2024.1** in
+`/tools/Xilinx/Vivado/2024.1`. With any other release it prints
+`Requires Vivado 2024.1; set XRAY_VIVADO_VERSION to use another.` and the
+environment is left unusable. If you installed it elsewhere, set the environment variable
+XRAY_VIVADO_SETTINGS to point to the settings64.sh file of the installed Vivado
+version. To use a different release, also set XRAY_VIVADO_VERSION, ie
 
-    export XRAY_VIVADO_SETTINGS=/opt/Xilinx/Vivado/2017.2/settings64.sh
+    export XRAY_VIVADO_SETTINGS=/opt/Xilinx/Vivado/2020.1/settings64.sh
+    export XRAY_VIVADO_VERSION=v2020.1
 
 Do not source the settings64.sh in your shell, since this adds directories of
 the Vivado installation at the beginning of your PATH and LD_LIBRARY_PATH
@@ -35,9 +40,10 @@ that shell. The Vivado wrapper utils/vivado.sh makes sure that the environment
 variables from XRAY_VIVADO_SETTINGS are automatically sourced in a separate
 shell that is then only used to run Vivado to avoid these problems.
 
-**Why 2017.2?** Currently the fuzzers only work on `2017.2`, see [Issue #14 on prjxray](https://github.com/f4pga/prjxray/issues/14).
-
-**Is 2017.2 really required?** Yes, only `2017.2` works. Until Issue #14 is solved, **only** `2017.2` works and will be supported.
+**What about 2017.2?** The original f4pga/prjxray fuzzers only worked on
+Vivado 2017.2 (see [Issue #14 on prjxray](https://github.com/f4pga/prjxray/issues/14)).
+This repository has since moved on: 2024.1 is the default, and the Virtex-7 port
+below was developed with 2020.1.
 
 ### Step 2: ###
 Clone the ``prjxray`` repository and its submodules:
