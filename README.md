@@ -1,13 +1,18 @@
 # Project X-Ray
 
 [![Documentation Status](https://img.shields.io/readthedocs/prjxray?longCache=true&style=flat-square&logo=ReadTheDocs&logoColor=fff)](http://prjxray.readthedocs.org/)
-[![License](https://img.shields.io/github/license/f4pga/prjxray.svg?longCache=true&style=flat-square&label=License)](https://github.com/f4pga/prjxray/blob/master/LICENSE)
-![GitHub Actions](https://img.shields.io/github/actions/workflow/status/f4pga/prjxray/Automerge.yml?branch=master&longCache=true&style=flat-square&label=GHA&logo=Github%20Actions&logoColor=fff)
+[![License](https://img.shields.io/github/license/openXC7/prjxray.svg?longCache=true&style=flat-square&label=License)](https://github.com/openXC7/prjxray/blob/master/LICENSE)
+[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/openXC7/prjxray/tests.yml?branch=master&longCache=true&style=flat-square&label=GHA&logo=Github%20Actions&logoColor=fff)](https://github.com/openXC7/prjxray/actions/workflows/tests.yml)
 
 Documenting the Xilinx 7-series bit-stream format.
 
 This repository contains both tools and scripts which allow you to document the
 bit-stream format of Xilinx 7-series FPGAs.
+
+> **Development of Project X-Ray continues here, in
+> [openXC7/prjxray](https://github.com/openXC7/prjxray).** Please send fixes
+> and improvements as pull requests to this repository rather than to
+> [f4pga/prjxray](https://github.com/f4pga/prjxray).
 
 > **Virtex-7 / VC707 users:** see [**Virtex-7 Port
 > Status**](#virtex-7-port-status-virtex7-support-branch) below for the

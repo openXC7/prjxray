@@ -65,7 +65,7 @@ on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:
     html_context = {
         "display_github": True,  # Integrate GitHub
-        "github_user": "f4pga",  # Username
+        "github_user": "openXC7",  # Username
         "github_repo": "prjxray",  # Repo name
         "github_version": "master",  # Version
         "conf_py_path": "/doc/",
@@ -104,8 +104,8 @@ html_show_sourcelink = True
 html_theme = 'sphinx_symbiflow_theme'
 
 html_theme_options = {
-    'repo_name': 'f4pga/prjxray',
-    'github_url' : 'https://github.com/f4pga/prjxray',
+    'repo_name': 'openXC7/prjxray',
+    'github_url' : 'https://github.com/openXC7/prjxray',
     'globaltoc_collapse': True,
     'color_primary': 'indigo',
     'color_accent': 'blue',

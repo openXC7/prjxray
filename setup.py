@@ -22,7 +22,7 @@ setuptools.setup(
     description="Project X-Ray libraries",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/SymbiFlow/prjxray",
+    url="https://github.com/openXC7/prjxray",
     packages=['prjxray'],
     install_requires=[
         'fasm',
