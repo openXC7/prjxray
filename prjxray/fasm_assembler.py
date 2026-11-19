@@ -8,6 +8,7 @@
 # https://opensource.org/licenses/ISC
 #
 # SPDX-License-Identifier: ISC
+import codecs
 import fasm
 import sys
 
@@ -20,6 +21,90 @@ class FasmLookupError(Exception):
 
 class FasmInconsistentBits(Exception):
     pass
+
+
+class FasmParseError(Exception):
+    '''The FASM input could not be parsed.
+
+    The message starts with 'Parse error', like the errors raised by fasm's
+    ANTLR parser.
+    '''
+    pass
+
+
+def parse_fasm_file(filename):
+    '''Parse a FASM file, raising FasmParseError for input fasm rejects.'''
+    # fasm's ANTLR parser aborts the whole process on input that is not
+    # UTF-8, so check that first.
+    try:
+        decoder = codecs.getincrementaldecoder('utf-8')()
+        offset = 0
+        with open(filename, 'rb') as f:
+            while True:
+                chunk = f.read(1 << 20)
+                decoder.decode(chunk, final=not chunk)
+                if not chunk:
+                    break
+                offset += len(chunk)
+    except UnicodeDecodeError as e:
+        # e.start counts from the start of the bytes the decoder still
+        # held, which may begin in the previous chunk.
+        pending = len(e.object) - len(chunk)
+        raise FasmParseError(
+            'Parse error - not UTF-8: byte 0x{:02x} at offset {} (in {})'.
+            format(e.object[e.start], offset - pending + e.start,
+                   filename)) from None
+    except OSError as e:
+        raise FasmParseError(
+            'Parse error - {} (in {})'.format(e.strerror, filename)) from None
+
+    # When fasm's ANTLR parser cannot convert a value (for example one wider
+    # than its feature), the exception is raised inside a ctypes callback,
+    # where Python only prints it, and the parser returns None. Hold back
+    # such exceptions with an unraisable hook (Python 3.8+) to report the
+    # reason properly; any that turn out not to explain a failure are passed
+    # on to the previous hook afterwards.
+    unraisable = []
+    old_hook = getattr(sys, 'unraisablehook', None)
+    if old_hook is not None:
+        sys.unraisablehook = unraisable.append
+    try:
+        lines = fasm.parse_fasm_filename(filename)
+        if lines is not None:
+            # The textX parser returns a generator, which raises as it goes.
+            lines = list(lines)
+    except (AssertionError, ValueError) as e:
+        # Both parsers check that values fit with assert, and Python's int()
+        # limits how many digits a value can have.
+        raise FasmParseError(
+            'Parse error - invalid value: {} (in {})'.format(
+                e, filename)) from None
+    except Exception as e:
+        if not str(e).startswith('Parse error'):
+            raise
+        raise FasmParseError('{} (in {})'.format(e, filename)) from None
+    finally:
+        if old_hook is not None:
+            sys.unraisablehook = old_hook
+
+    if lines is not None or not unraisable:
+        for u in unraisable:
+            old_hook(u)
+
+    if lines is None:
+        e = unraisable[0].exc_value if unraisable else None
+        if isinstance(e, UnicodeDecodeError):
+            # It decodes its own output as ASCII, so this is non-ASCII text
+            # (even in a comment).
+            reason = 'non-ASCII text, which fasm cannot read'
+        elif e is not None:
+            reason = 'invalid value: {}'.format(e)
+        else:
+            reason = 'see the message above'
+        raise FasmParseError(
+            'Parse error - {} (in {})'.format(reason, filename))
+
+    return lines
 
 
 def init_frame_at_address(frames, addr):
@@ -123,7 +208,12 @@ class FasmAssembler(object):
         self.frames_line[key] = line
 
     def enable_feature(self, tile, feature, address, line):
-        gridinfo = self.grid.gridinfo_at_tilename(tile)
+        try:
+            gridinfo = self.grid.gridinfo_at_tilename(tile)
+        except KeyError:
+            raise FasmLookupError(
+                "Tile %s not found in the tile grid (wrong part?) from line "
+                "'%s'" % (tile, line)) from None
 
         def update_segbit(bit):
             '''Set or clear a single bit in a segment at the given word column and word bit position'''
@@ -193,7 +283,7 @@ class FasmAssembler(object):
 
     def parse_fasm_filename(self, filename, extra_features=[]):
         missing_features = []
-        for line in fasm.parse_fasm_filename(filename):
+        for line in parse_fasm_file(filename):
             self.add_fasm_line(line, missing_features)
 
         for line in extra_features:

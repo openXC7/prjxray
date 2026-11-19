@@ -14,10 +14,13 @@ from io import StringIO
 import os
 import os.path
 import re
+import sys
 import unittest
 import tempfile
+from unittest import mock
 
 import prjxray
+from prjxray import fasm_assembler
 import utils.fasm2frames as fasm2frames
 from prjxray.util import OpenSafeFile
 
@@ -241,6 +244,76 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
                 'LIOI_X2Y10.OLOGIC_Y1.ZINV_CLK\n'))
         self.assertIn(self.HP_OQUSED, bits)
         self.assertNotIn(self.HP_OMUX_D1, bits)
+
+    def test_unknown_tile(self):
+        '''A tile missing from the part is a lookup error, not a KeyError'''
+        with self.assertRaisesRegex(fasm_assembler.FasmLookupError,
+                                    'Tile CLBLM_L_X999Y999 not found'):
+            self.fasm2frames('CLBLM_L_X999Y999.SLICEM_X0.AFF.ZINI\n')
+
+    def test_not_utf8(self):
+        '''Input that is not UTF-8 is a parse error'''
+        with tempfile.NamedTemporaryFile(suffix='.fasm') as fin:
+            fin.write(b'# caf\xe9\nCLBLM_L_X10Y102.SLICEM_X0.AFF.ZINI\n')
+            fin.flush()
+            with self.assertRaisesRegex(fasm_assembler.FasmParseError,
+                                        'not UTF-8'):
+                fasm2frames.run(
+                    self.filename_test_data('db'), "xc7a200tffg1156-1",
+                    fin.name, StringIO())
+
+    def test_value_too_wide(self):
+        '''A value wider than its feature is a parse error'''
+        with self.assertRaisesRegex(fasm_assembler.FasmParseError,
+                                    'invalid value'):
+            self.fasm2frames(
+                "CLBLM_L_X10Y102.SLICEM_X0.ALUT.INIT[3:0] = 4'd99\n")
+
+    def test_main_error(self):
+        '''main() reports an error and removes the output file'''
+        with tempfile.TemporaryDirectory() as d:
+            fn_in = os.path.join(d, 'design.fasm')
+            fn_out = os.path.join(d, 'design.frm')
+            with open(fn_in, 'w') as f:
+                f.write('CLBLM_L_X10Y102.SLICEM_X0.NOPE\n')
+            # Output from an earlier run must not survive a failed one.
+            with open(fn_out, 'w') as f:
+                f.write('0x00000000 0x00000000\n')
+            argv = [
+                'fasm2frames', '--db-root',
+                self.filename_test_data('db'), '--part', 'xc7a200tffg1156-1',
+                fn_in, fn_out
+            ]
+            stderr = StringIO()
+            with mock.patch.object(sys, 'argv', argv), \
+                    mock.patch.object(sys, 'stderr', stderr), \
+                    self.assertRaises(SystemExit) as cm:
+                fasm2frames.main()
+            self.assertEqual(cm.exception.code, 1)
+            self.assertIn('SLICEM_X0.NOPE not found', stderr.getvalue())
+            self.assertNotIn('Traceback', stderr.getvalue())
+            self.assertEqual(os.listdir(d), ['design.fasm'])
+
+    def test_main_missing_database(self):
+        '''main() reports a missing database or part without a traceback'''
+        fn_in = self.filename_test_data('ff_int.fasm')
+        for db_root, part, message in (
+            ('/nonexistent', 'xc7a200tffg1156-1', 'does not exist'),
+            (self.filename_test_data('db'), 'xc7nope',
+             'Part xc7nope not found'),
+        ):
+            with self.subTest(db_root=db_root, part=part):
+                argv = [
+                    'fasm2frames', '--db-root', db_root, '--part', part, fn_in
+                ]
+                stderr = StringIO()
+                with mock.patch.object(sys, 'argv', argv), \
+                        mock.patch.object(sys, 'stderr', stderr), \
+                        self.assertRaises(SystemExit) as cm:
+                    fasm2frames.main()
+                self.assertEqual(cm.exception.code, 1)
+                self.assertIn(message, stderr.getvalue())
+                self.assertNotIn('Traceback', stderr.getvalue())
 
 
 if __name__ == '__main__':
