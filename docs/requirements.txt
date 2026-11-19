@@ -1,4 +1,5 @@
-https://github.com/f4pga/sphinx_f4pga_theme/archive/main.zip#sphinx-symbiflow-theme
+# Not on PyPI: pinned to a commit, so that the download is reproducible.
+sphinx_symbiflow_theme @ git+https://github.com/f4pga/sphinx_f4pga_theme@3f163c492ae98072ea76d18c5dc1ba251bfbfbd9
 
 docutils
 sphinx
@@ -10,4 +11,5 @@ sphinx-markdown-tables
 sphinxcontrib-napoleon
 
 # Markdown cross-reference solver library
-http://github.com/SymbiFlow/sphinxcontrib-markdown-symlinks/archive/master.zip#sphinxcontrib-markdown-symlinks
+# Not on PyPI: pinned to a commit, like the theme above.
+markdown_code_symlinks @ git+https://github.com/SymbiFlow/sphinxcontrib-markdown-symlinks@4ead1c22270188cd0529741679769c56d9c341bf
