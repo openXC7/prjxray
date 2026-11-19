@@ -8,8 +8,10 @@
  * SPDX-License-Identifier: ISC
  */
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <algorithm>
 #include <fstream>
@@ -94,7 +96,7 @@ struct bool_vec {
 	bool_vec(int n = 0, bool initval = false)
 	    : data((n + 63) / 64, initval ? ~uint64_t(0) : uint64_t(0)) {
 		for (int i = data.size() * 64 - 1; i >= n; i--)
-			data[n / 64] &= ~(uint64_t(1) << (n % 64));
+			data[i / 64] &= ~(uint64_t(1) << (i % 64));
 	}
 
 	void set(int n) {
@@ -145,14 +147,33 @@ static inline bool_vec& segdata_tags0(segdata_t& sd) {
 	return std::get<2>(sd);
 }
 
+// Report malformed input and exit. assert() would be compiled out in
+// release builds, leaving a null segptr or a misread tag value.
+[[noreturn]] static void input_error(const std::string& filename,
+                                     const std::string& message) {
+	fprintf(stderr, "ERROR: %s: %s\n", filename.c_str(), message.c_str());
+	exit(1);
+}
+
+// Read the operand that must follow a keyword.
+static std::string read_operand(std::istream& f,
+                                const std::string& filename,
+                                const std::string& keyword) {
+	string operand;
+	if (!(f >> operand))
+		input_error(filename,
+		            "unexpected end of input after '" + keyword + "'");
+	return operand;
+}
+
 void read_input(std::istream& f, std::string filename) {
 	string token;
 	segdata_t* segptr = nullptr;
 
 	while (f >> token) {
 		if (token == "seg") {
-			f >> token;
-			token = filename + ":" + token;
+			token =
+			    filename + ":" + read_operand(f, filename, "seg");
 			while (segdata.count(token)) {
 				int idx = 1;
 				if (segnamecnt.count(token))
@@ -167,9 +188,11 @@ void read_input(std::istream& f, std::string filename) {
 		}
 
 		if (token == "bit") {
-			assert(segptr != nullptr);
+			if (segptr == nullptr)
+				input_error(filename,
+				            "'bit' before the first 'seg'");
 
-			f >> token;
+			token = read_operand(f, filename, "bit");
 			if (bit_ids.count(token) == 0) {
 				bit_ids[token] = num_bits++;
 				bit_ids_r.push_back(token);
@@ -183,9 +206,11 @@ void read_input(std::istream& f, std::string filename) {
 		}
 
 		if (token == "tag") {
-			assert(segptr != nullptr);
+			if (segptr == nullptr)
+				input_error(filename,
+				            "'tag' before the first 'seg'");
 
-			f >> token;
+			token = read_operand(f, filename, "tag");
 			if (tag_ids.count(token) == 0) {
 				tag_ids[token] = num_tags++;
 				tag_ids_r.push_back(token);
@@ -193,8 +218,13 @@ void read_input(std::istream& f, std::string filename) {
 
 			int tag_idx = tag_ids.at(token);
 
-			f >> token;
-			assert(token == "0" || token == "1");
+			token = read_operand(f, filename,
+			                     "tag " + tag_ids_r.at(tag_idx));
+			if (token != "0" && token != "1")
+				input_error(filename,
+				            "tag " + tag_ids_r.at(tag_idx) +
+				                " has value '" + token +
+				                "', expected 0 or 1");
 
 			auto& tags = token == "1" ? segdata_tags1(*segptr)
 			                          : segdata_tags0(*segptr);
@@ -220,7 +250,7 @@ void read_input(std::istream& f, std::string filename) {
 			continue;
 		}
 
-		abort();
+		input_error(filename, "unknown token '" + token + "'");
 	}
 
 	// printf("Number of segments: %d\n", int(segdata.size()));
@@ -267,7 +297,11 @@ int main(int argc, char** argv) {
 
 	if (!FLAGS_o.empty()) {
 		f = fopen(FLAGS_o.c_str(), "w");
-		assert(f != nullptr);
+		if (f == nullptr) {
+			fprintf(stderr, "ERROR: can't write %s: %s\n",
+			        FLAGS_o.c_str(), strerror(errno));
+			return 1;
+		}
 	}
 
 	int cnt_const0 = 0;
@@ -386,7 +420,11 @@ int main(int argc, char** argv) {
 
 	if (!FLAGS_k.empty()) {
 		f = fopen(FLAGS_k.c_str(), "w");
-		assert(f != nullptr);
+		if (f == nullptr) {
+			fprintf(stderr, "ERROR: can't write %s: %s\n",
+			        FLAGS_k.c_str(), strerror(errno));
+			return 1;
+		}
 		std::sort(bit_ids_r.begin(), bit_ids_r.end());
 		for (auto bit : bit_ids_r)
 			fprintf(f, "bit %s\n", bit.c_str());
