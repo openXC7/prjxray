@@ -19,8 +19,6 @@ import unittest
 import tempfile
 from unittest import mock
 
-import fasm
-
 import prjxray
 from prjxray import fasm_assembler
 import utils.fasm2frames as fasm2frames
@@ -264,10 +262,8 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
 
     def test_value_too_wide(self):
         '''A value wider than its feature is a parse error'''
-        if 'antlr' not in fasm.parse_fasm_filename.__module__:
-            self.skipTest('the textX parser reports this differently')
         with self.assertRaisesRegex(fasm_assembler.FasmParseError,
-                                    'larger than specified width'):
+                                    'invalid value'):
             self.fasm2frames(
                 "CLBLM_L_X10Y102.SLICEM_X0.ALUT.INIT[3:0] = 4'd99\n")
 

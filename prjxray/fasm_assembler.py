@@ -70,6 +70,15 @@ def parse_fasm_file(filename):
         sys.unraisablehook = unraisable.append
     try:
         lines = fasm.parse_fasm_filename(filename)
+        if lines is not None:
+            # The textX parser returns a generator, which raises as it goes.
+            lines = list(lines)
+    except (AssertionError, ValueError) as e:
+        # Both parsers check that values fit with assert, and Python's int()
+        # limits how many digits a value can have.
+        raise FasmParseError(
+            'Parse error - invalid value: {} (in {})'.format(
+                e, filename)) from None
     except Exception as e:
         if not str(e).startswith('Parse error'):
             raise
