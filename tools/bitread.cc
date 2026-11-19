@@ -7,8 +7,11 @@
  *
  * SPDX-License-Identifier: ISC
  */
+#include <ctype.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <iostream>
@@ -62,7 +65,9 @@ DEFINE_string(
 namespace xilinx = prjxray::xilinx;
 
 std::set<uint32_t> frames;
-uint32_t frame_range_begin = 0, frame_range_end = 0;
+// -F: only dump frames from frame_range_first to frame_range_last, inclusive.
+bool frame_range_set = false;
+uint32_t frame_range_first = 0, frame_range_last = 0;
 
 std::vector<uint32_t> zero_frame(101);
 
@@ -150,9 +155,8 @@ struct BitReader {
 			if (!frames.empty() && !frames.count(it.first))
 				continue;
 
-			if (frame_range_begin != frame_range_end &&
-			    (it.first < frame_range_begin ||
-			     frame_range_end <= it.first))
+			if (frame_range_set && (it.first < frame_range_first ||
+			                        frame_range_last < it.first))
 				continue;
 
 			if (FLAGS_o.empty())
@@ -304,6 +308,23 @@ struct BitReader {
 	}
 };
 
+// Parses a frame address for -F: a whole decimal or 0x-prefixed hex number
+// that fits in 32 bits. Decimal numbers with leading zeros stay decimal
+// (strtoull's base 0 would read them as octal).
+static bool ParseFrameAddress(const std::string& text, uint32_t* address) {
+	if (text.empty() || !isdigit(static_cast<unsigned char>(text[0])))
+		return false;
+	bool hex = text.size() > 1 && text[0] == '0' &&
+	           (text[1] == 'x' || text[1] == 'X');
+	errno = 0;
+	char* end = nullptr;
+	unsigned long long value = strtoull(text.c_str(), &end, hex ? 16 : 10);
+	if (errno != 0 || *end != '\0' || value > 0xFFFFFFFFull)
+		return false;
+	*address = static_cast<uint32_t>(value);
+	return true;
+}
+
 int main(int argc, char** argv) {
 	gflags::SetUsageMessage(
 	    absl::StrCat("Usage: ", argv[0], " [options] [bitfile]"));
@@ -313,11 +334,22 @@ int main(int argc, char** argv) {
 		frames.insert(FLAGS_f);
 	}
 
-	if (!FLAGS_F.empty()) {
-		std::pair<std::string, std::string> p =
-		    absl::StrSplit(FLAGS_F, ":");
-		frame_range_begin = strtol(p.first.c_str(), nullptr, 0);
-		frame_range_end = strtol(p.second.c_str(), nullptr, 0) + 1;
+	// Check -F whenever it was given, so an empty value is an error rather
+	// than silently dumping every frame.
+	if (!gflags::GetCommandLineFlagInfoOrDie("F").is_default) {
+		std::vector<std::string> range = absl::StrSplit(FLAGS_F, ':');
+		if (range.size() != 2 ||
+		    !ParseFrameAddress(range[0], &frame_range_first) ||
+		    !ParseFrameAddress(range[1], &frame_range_last) ||
+		    frame_range_last < frame_range_first) {
+			std::cerr
+			    << "Invalid -F '" << FLAGS_F
+			    << "': expected "
+			       "<first_frame_address>:<last_frame_address>"
+			    << std::endl;
+			return 1;
+		}
+		frame_range_set = true;
 	}
 
 	absl::Span<uint8_t> in_bytes;
