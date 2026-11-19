@@ -28,10 +28,12 @@ Install Vivado. By default `utils/environment.sh` expects **Vivado 2024.1** in
 `Requires Vivado 2024.1; set XRAY_VIVADO_VERSION to use another.` and the
 environment is left unusable. If you installed it elsewhere, set the environment variable
 XRAY_VIVADO_SETTINGS to point to the settings64.sh file of the installed Vivado
-version. To use a different release, also set XRAY_VIVADO_VERSION, ie
+version. To use a different release, also set XRAY_VIVADO_VERSION to the
+version exactly as `vivado -version` reports it, including any update number,
+ie for 2020.1 with its update (which `settings/virtex7.sh` sets by default)
 
     export XRAY_VIVADO_SETTINGS=/opt/Xilinx/Vivado/2020.1/settings64.sh
-    export XRAY_VIVADO_VERSION=v2020.1
+    export XRAY_VIVADO_VERSION=v2020.1.1
 
 Do not source the settings64.sh in your shell, since this adds directories of
 the Vivado installation at the beginning of your PATH and LD_LIBRARY_PATH
