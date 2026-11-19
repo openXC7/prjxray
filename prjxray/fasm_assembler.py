@@ -22,6 +22,55 @@ class FasmInconsistentBits(Exception):
     pass
 
 
+class FasmParseError(Exception):
+    '''The FASM input could not be parsed.
+
+    The message starts with 'Parse error', like the errors raised by fasm's
+    ANTLR parser.
+    '''
+    pass
+
+
+def parse_fasm_file(filename):
+    '''Parse a FASM file, raising FasmParseError for input fasm rejects.'''
+    # fasm's ANTLR parser aborts the whole process on input that is not
+    # UTF-8, so check that first.
+    try:
+        with open(filename, 'rb') as f:
+            f.read().decode('utf-8')
+    except UnicodeDecodeError as e:
+        raise FasmParseError(
+            'Parse error - not UTF-8: byte 0x{:02x} at offset {} (in {})'.
+            format(e.object[e.start], e.start, filename)) from None
+    except OSError as e:
+        raise FasmParseError(
+            'Parse error - {} (in {})'.format(e.strerror, filename)) from None
+
+    # When fasm's ANTLR parser cannot convert a value (for example one wider
+    # than its feature), the exception is raised inside a ctypes callback,
+    # where Python only prints it, and the parser returns None. Catch it
+    # with an unraisable hook to report it properly.
+    callback_errors = []
+    old_hook = sys.unraisablehook
+    sys.unraisablehook = lambda u: callback_errors.append(u.exc_value)
+    try:
+        lines = fasm.parse_fasm_filename(filename)
+    except Exception as e:
+        if not str(e).startswith('Parse error'):
+            raise
+        raise FasmParseError('{} (in {})'.format(e, filename)) from None
+    finally:
+        sys.unraisablehook = old_hook
+
+    if lines is None:
+        reason = str(callback_errors[0]) if callback_errors else 'unknown'
+        raise FasmParseError(
+            'Parse error - invalid value: {} (in {})'.format(
+                reason, filename))
+
+    return lines
+
+
 def init_frame_at_address(frames, addr):
     '''Set given frame to 0 if not initialized '''
     if not addr in frames:
@@ -123,7 +172,12 @@ class FasmAssembler(object):
         self.frames_line[key] = line
 
     def enable_feature(self, tile, feature, address, line):
-        gridinfo = self.grid.gridinfo_at_tilename(tile)
+        try:
+            gridinfo = self.grid.gridinfo_at_tilename(tile)
+        except KeyError:
+            raise FasmLookupError(
+                "Tile %s not found in the tile grid (wrong part?) from line "
+                "'%s'" % (tile, line)) from None
 
         def update_segbit(bit):
             '''Set or clear a single bit in a segment at the given word column and word bit position'''
@@ -193,7 +247,7 @@ class FasmAssembler(object):
 
     def parse_fasm_filename(self, filename, extra_features=[]):
         missing_features = []
-        for line in fasm.parse_fasm_filename(filename):
+        for line in parse_fasm_file(filename):
             self.add_fasm_line(line, missing_features)
 
         for line in extra_features:

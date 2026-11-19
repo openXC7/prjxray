@@ -13,6 +13,7 @@ from __future__ import print_function
 
 import fasm
 import argparse
+import io
 import json
 import os
 import os.path
@@ -635,15 +636,41 @@ def main():
         help='Output FPGA frame (.frm) file (default: stdout)')
 
     args = parser.parse_args()
-    run(
-        db_root=args.db_root,
-        part=args.part,
-        filename_in=args.fn_in,
-        f_out=(open(args.fn_out, 'w') if args.fn_out else sys.stdout),
-        sparse=args.sparse,
-        roi=args.roi,
-        debug=args.debug,
-        emit_pudc_b_pullup=args.emit_pudc_b_pullup)
+
+    # Report errors in the input without a traceback.
+    input_errors = (
+        fasm_assembler.FasmLookupError,
+        fasm_assembler.FasmInconsistentBits,
+        fasm_assembler.FasmParseError,
+    )
+    try:
+        from textx.exceptions import TextXSyntaxError
+        input_errors += (TextXSyntaxError, )
+    except ImportError:
+        pass
+
+    # Only create the output file once the frames are complete, so that a
+    # failed run does not leave an empty or partial .frm behind.
+    frames_out = io.StringIO()
+    try:
+        run(
+            db_root=args.db_root,
+            part=args.part,
+            filename_in=args.fn_in,
+            f_out=frames_out,
+            sparse=args.sparse,
+            roi=args.roi,
+            debug=args.debug,
+            emit_pudc_b_pullup=args.emit_pudc_b_pullup)
+    except input_errors as e:
+        eprint('fasm2frames: error: {}'.format(e))
+        sys.exit(1)
+
+    if args.fn_out:
+        with open(args.fn_out, 'w') as f:
+            f.write(frames_out.getvalue())
+    else:
+        sys.stdout.write(frames_out.getvalue())
 
 
 if __name__ == '__main__':
