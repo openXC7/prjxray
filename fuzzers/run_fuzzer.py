@@ -336,8 +336,11 @@ def get_memory(memstr=None):
      'swap': {'free': 0.0, 'total': 0.0, 'used': 0.0}}
     """
     if memstr is None:
+        # free prints numbers and column names for the current locale, e.g.
+        # "7,2Gi" with a decimal comma, which mem_convert can't parse.
+        env = dict(os.environ, LC_ALL='C')
         memstr = subprocess.check_output(
-            'free -mh', shell=True).decode("utf-8")
+            'free -mh', shell=True, env=env).decode("utf-8")
 
     lines = [x.split() for x in memstr.strip().splitlines()]
     lines[0].insert(0, 'type:')
