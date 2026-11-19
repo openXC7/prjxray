@@ -309,13 +309,16 @@ struct BitReader {
 };
 
 // Parses a frame address for -F: a whole decimal or 0x-prefixed hex number
-// that fits in 32 bits.
+// that fits in 32 bits. Decimal numbers with leading zeros stay decimal
+// (strtoull's base 0 would read them as octal).
 static bool ParseFrameAddress(const std::string& text, uint32_t* address) {
 	if (text.empty() || !isdigit(static_cast<unsigned char>(text[0])))
 		return false;
+	bool hex = text.size() > 1 && text[0] == '0' &&
+	           (text[1] == 'x' || text[1] == 'X');
 	errno = 0;
 	char* end = nullptr;
-	unsigned long long value = strtoull(text.c_str(), &end, 0);
+	unsigned long long value = strtoull(text.c_str(), &end, hex ? 16 : 10);
 	if (errno != 0 || *end != '\0' || value > 0xFFFFFFFFull)
 		return false;
 	*address = static_cast<uint32_t>(value);
@@ -331,7 +334,9 @@ int main(int argc, char** argv) {
 		frames.insert(FLAGS_f);
 	}
 
-	if (!FLAGS_F.empty()) {
+	// Check -F whenever it was given, so an empty value is an error rather
+	// than silently dumping every frame.
+	if (!gflags::GetCommandLineFlagInfoOrDie("F").is_default) {
 		std::vector<std::string> range = absl::StrSplit(FLAGS_F, ':');
 		if (range.size() != 2 ||
 		    !ParseFrameAddress(range[0], &frame_range_first) ||
