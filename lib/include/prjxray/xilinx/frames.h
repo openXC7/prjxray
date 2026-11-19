@@ -10,9 +10,11 @@
 #ifndef PRJXRAY_LIB_XILINX_FRAMES_H
 #define PRJXRAY_LIB_XILINX_FRAMES_H
 
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -21,6 +23,29 @@
 
 namespace prjxray {
 namespace xilinx {
+
+namespace frames_internal {
+// Parses a frames-file field: a hex number, with an optional 0x prefix,
+// that fits in 32 bits and is the whole field. std::stoul alone would
+// stop at trailing characters, accept a sign or leading spaces, and
+// return values wider than 32 bits.
+inline bool ParseHexWord(const std::string& field, uint32_t* value) {
+	if (field.empty() ||
+	    !std::isxdigit(static_cast<unsigned char>(field[0])))
+		return false;
+	size_t used = 0;
+	unsigned long parsed;
+	try {
+		parsed = std::stoul(field, &used, 16);
+	} catch (const std::logic_error&) {
+		return false;
+	}
+	if (used != field.size() || parsed > 0xFFFFFFFFul)
+		return false;
+	*value = static_cast<uint32_t>(parsed);
+	return true;
+}
+}  // namespace frames_internal
 
 // Contains frame information which is used for the generation
 // of the configuration package that is used in bitstream generation.
@@ -78,8 +103,15 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 		return 1;
 	}
 	std::string frm_line;
+	size_t line_number = 0;
 
 	while (std::getline(frm_file, frm_line)) {
+		line_number++;
+
+		// Accept a file written with Windows line endings.
+		if (!frm_line.empty() && frm_line.back() == '\r')
+			frm_line.pop_back();
+
 		// A cut that lands inside a line leaves no newline. A short
 		// prefix of a hex word is still a number, so the word count
 		// stays 101 and the short word is stored. A complete last
@@ -92,14 +124,26 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 			return 1;
 		}
 
+		if (frm_line.empty()) {
+			std::cerr << "Frames file " << frm_file_str << " line "
+			          << line_number << " is empty" << std::endl;
+			return 1;
+		}
+
 		if (frm_line[0] == '#')
 			continue;
 
 		std::pair<std::string, std::string> frame_delta =
 		    absl::StrSplit(frm_line, ' ');
 
-		uint32_t frame_address =
-		    std::stoul(frame_delta.first, nullptr, 16);
+		uint32_t frame_address;
+		if (!frames_internal::ParseHexWord(frame_delta.first,
+		                                   &frame_address)) {
+			std::cerr << "Frames file " << frm_file_str << " line "
+			          << line_number << ": invalid frame address '"
+			          << frame_delta.first << "'" << std::endl;
+			return 1;
+		}
 
 		std::vector<std::string> frame_data_strings =
 		    absl::StrSplit(frame_delta.second, ',');
@@ -119,11 +163,17 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 		}
 
 		FrameData frame_data(frame_data_strings.size(), 0);
-		std::transform(frame_data_strings.begin(),
-		               frame_data_strings.end(), frame_data.begin(),
-		               [](const std::string& val) -> uint32_t {
-			               return std::stoul(val, nullptr, 16);
-		               });
+		for (size_t ii = 0; ii < frame_data_strings.size(); ii++) {
+			if (!frames_internal::ParseHexWord(
+			        frame_data_strings[ii], &frame_data[ii])) {
+				std::cerr << "Frames file " << frm_file_str
+				          << " line " << line_number
+				          << ": invalid word '"
+				          << frame_data_strings[ii] << "'"
+				          << std::endl;
+				return 1;
+			}
+		}
 
 		updateECC(frame_data);
 
