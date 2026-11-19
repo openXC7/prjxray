@@ -126,15 +126,25 @@ class TestStringMethods(unittest.TestCase):
     def test_opkey_01_1(self):
         self.fasm2frames("CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1")
 
+    def assertSyntaxError(self, fasm_str):
+        '''fasm2frames should reject fasm_str with a FASM syntax error.
+
+        fasm's textX parser raises TextXSyntaxError, and its faster ANTLR
+        parser raises a plain Exception('Parse error at ...').
+        '''
+        with self.assertRaises(Exception) as cm:
+            self.fasm2frames(fasm_str)
+        e = cm.exception
+        self.assertTrue(
+            isinstance(e, TextXSyntaxError)
+            or str(e).startswith('Parse error'),
+            "Expected syntax error, got {!r}".format(e))
+
     @unittest.skip
     def test_opkey_enum(self):
         '''Optional key with enumerated value should produce syntax error'''
-        try:
-            # CLBLM_L.SLICEM_X0.AMUXFF.O6 !30_06 !30_07 !30_08 30_11
-            self.fasm2frames("CLBLM_L_X10Y102.SLICEM_X0.AFFMUX.O6")
-            self.fail("Expected syntax error")
-        except TextXSyntaxError:
-            pass
+        # CLBLM_L.SLICEM_X0.AMUXFF.O6 !30_06 !30_07 !30_08 30_11
+        self.assertSyntaxError("CLBLM_L_X10Y102.SLICEM_X0.AFFMUX.O6")
 
     def test_ff_int_0s(self):
         '''Explicit 0 entries'''
@@ -142,24 +152,16 @@ class TestStringMethods(unittest.TestCase):
 
     def test_badkey(self):
         '''Bad key should throw syntax error'''
-        try:
-            self.fasm2frames("CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 2")
-            self.fail("Expected syntax error")
-        except TextXSyntaxError:
-            pass
+        self.assertSyntaxError("CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 2")
 
     @unittest.skip
     def test_dupkey(self):
         '''Duplicate key should throw syntax error'''
-        try:
-            self.fasm2frames(
-                """\
+        self.assertSyntaxError(
+            """\
 CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 0
 CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
 """)
-            self.fail("Expected syntax error")
-        except TextXSyntaxError:
-            pass
 
     @unittest.skip
     def test_sparse(self):
