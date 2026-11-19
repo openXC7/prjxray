@@ -10,6 +10,7 @@
 #ifndef PRJXRAY_LIB_XILINX_FRAMES_H
 #define PRJXRAY_LIB_XILINX_FRAMES_H
 
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -22,6 +23,29 @@
 
 namespace prjxray {
 namespace xilinx {
+
+namespace frames_internal {
+// Parses a frames-file field: a hex number, with an optional 0x prefix,
+// that fits in 32 bits and is the whole field. std::stoul alone would
+// stop at trailing characters, accept a sign or leading spaces, and
+// return values wider than 32 bits.
+inline bool ParseHexWord(const std::string& field, uint32_t* value) {
+	if (field.empty() ||
+	    !std::isxdigit(static_cast<unsigned char>(field[0])))
+		return false;
+	size_t used = 0;
+	unsigned long parsed;
+	try {
+		parsed = std::stoul(field, &used, 16);
+	} catch (const std::logic_error&) {
+		return false;
+	}
+	if (used != field.size() || parsed > 0xFFFFFFFFul)
+		return false;
+	*value = static_cast<uint32_t>(parsed);
+	return true;
+}
+}  // namespace frames_internal
 
 // Contains frame information which is used for the generation
 // of the configuration package that is used in bitstream generation.
@@ -84,6 +108,10 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 	while (std::getline(frm_file, frm_line)) {
 		line_number++;
 
+		// Accept a file written with Windows line endings.
+		if (!frm_line.empty() && frm_line.back() == '\r')
+			frm_line.pop_back();
+
 		// A cut that lands inside a line leaves no newline. A short
 		// prefix of a hex word is still a number, so the word count
 		// stays 101 and the short word is stored. A complete last
@@ -108,13 +136,9 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 		std::pair<std::string, std::string> frame_delta =
 		    absl::StrSplit(frm_line, ' ');
 
-		// std::stoul throws on a field that isn't a hex number. Report
-		// the line instead of letting the exception end the program.
 		uint32_t frame_address;
-		try {
-			frame_address =
-			    std::stoul(frame_delta.first, nullptr, 16);
-		} catch (const std::logic_error&) {
+		if (!frames_internal::ParseHexWord(frame_delta.first,
+		                                   &frame_address)) {
 			std::cerr << "Frames file " << frm_file_str << " line "
 			          << line_number << ": invalid frame address '"
 			          << frame_delta.first << "'" << std::endl;
@@ -140,10 +164,8 @@ int Frames<ArchType>::readFrames(const std::string& frm_file_str) {
 
 		FrameData frame_data(frame_data_strings.size(), 0);
 		for (size_t ii = 0; ii < frame_data_strings.size(); ii++) {
-			try {
-				frame_data[ii] = std::stoul(
-				    frame_data_strings[ii], nullptr, 16);
-			} catch (const std::logic_error&) {
+			if (!frames_internal::ParseHexWord(
+			        frame_data_strings[ii], &frame_data[ii])) {
 				std::cerr << "Frames file " << frm_file_str
 				          << " line " << line_number
 				          << ": invalid word '"

@@ -174,6 +174,50 @@ TEST(FramesTest, ReadFramesRefusesBadWord) {
 	    frames.readFrames(WriteFramesFile("badword.frm", line + "\n")), 0);
 }
 
+namespace {
+// A frame line with 101 words, the second one replaced by second_word.
+std::string FrameLine(const std::string& second_word) {
+	std::string line = "0x00000002 0x00000001," + second_word;
+	for (int i = 2; i < 101; i++) {
+		line += ",0x00000000";
+	}
+	return line;
+}
+}  // namespace
+
+TEST(FramesTest, ReadFramesRefusesTrailingCharacters) {
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile(
+	              "junk.frm", FrameLine("0x00000001zz") + "\n")),
+	          0);
+}
+
+TEST(FramesTest, ReadFramesRefusesWordWiderThan32Bits) {
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(WriteFramesFile(
+	              "wide.frm", FrameLine("0x100000000") + "\n")),
+	          0);
+}
+
+TEST(FramesTest, ReadFramesRefusesSignedWord) {
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(
+	              WriteFramesFile("signed.frm", FrameLine("-1") + "\n")),
+	          0);
+}
+
+TEST(FramesTest, ReadFramesAcceptsWindowsLineEndings) {
+	Frames<Series7> crlf;
+	EXPECT_EQ(crlf.readFrames(WriteFramesFile(
+	              "crlf.frm", FrameLine("0x00000000") + "\r\n")),
+	          0);
+	Frames<Series7> lf;
+	EXPECT_EQ(lf.readFrames(WriteFramesFile(
+	              "lf.frm", FrameLine("0x00000000") + "\n")),
+	          0);
+	EXPECT_EQ(crlf.getFrames(), lf.getFrames());
+}
+
 TEST(FramesTest, ReadFramesRefusesEmptyLine) {
 	std::string line = "0x00000002 0x00000001";
 	for (int i = 1; i < 101; i++) {
