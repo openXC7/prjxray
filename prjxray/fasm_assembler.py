@@ -8,6 +8,7 @@
 # https://opensource.org/licenses/ISC
 #
 # SPDX-License-Identifier: ISC
+import codecs
 import fasm
 import sys
 
@@ -36,23 +37,37 @@ def parse_fasm_file(filename):
     # fasm's ANTLR parser aborts the whole process on input that is not
     # UTF-8, so check that first.
     try:
+        decoder = codecs.getincrementaldecoder('utf-8')()
+        offset = 0
         with open(filename, 'rb') as f:
-            f.read().decode('utf-8')
+            while True:
+                chunk = f.read(1 << 20)
+                decoder.decode(chunk, final=not chunk)
+                if not chunk:
+                    break
+                offset += len(chunk)
     except UnicodeDecodeError as e:
+        # e.start counts from the start of the bytes the decoder still
+        # held, which may begin in the previous chunk.
+        pending = len(e.object) - len(chunk)
         raise FasmParseError(
             'Parse error - not UTF-8: byte 0x{:02x} at offset {} (in {})'.
-            format(e.object[e.start], e.start, filename)) from None
+            format(e.object[e.start], offset - pending + e.start,
+                   filename)) from None
     except OSError as e:
         raise FasmParseError(
             'Parse error - {} (in {})'.format(e.strerror, filename)) from None
 
     # When fasm's ANTLR parser cannot convert a value (for example one wider
     # than its feature), the exception is raised inside a ctypes callback,
-    # where Python only prints it, and the parser returns None. Catch it
-    # with an unraisable hook to report it properly.
-    callback_errors = []
-    old_hook = sys.unraisablehook
-    sys.unraisablehook = lambda u: callback_errors.append(u.exc_value)
+    # where Python only prints it, and the parser returns None. Hold back
+    # such exceptions with an unraisable hook (Python 3.8+) to report the
+    # reason properly; any that turn out not to explain a failure are passed
+    # on to the previous hook afterwards.
+    unraisable = []
+    old_hook = getattr(sys, 'unraisablehook', None)
+    if old_hook is not None:
+        sys.unraisablehook = unraisable.append
     try:
         lines = fasm.parse_fasm_filename(filename)
     except Exception as e:
@@ -60,13 +75,25 @@ def parse_fasm_file(filename):
             raise
         raise FasmParseError('{} (in {})'.format(e, filename)) from None
     finally:
-        sys.unraisablehook = old_hook
+        if old_hook is not None:
+            sys.unraisablehook = old_hook
+
+    if lines is not None or not unraisable:
+        for u in unraisable:
+            old_hook(u)
 
     if lines is None:
-        reason = str(callback_errors[0]) if callback_errors else 'unknown'
+        e = unraisable[0].exc_value if unraisable else None
+        if isinstance(e, UnicodeDecodeError):
+            # It decodes its own output as ASCII, so this is non-ASCII text
+            # (even in a comment).
+            reason = 'non-ASCII text, which fasm cannot read'
+        elif e is not None:
+            reason = 'invalid value: {}'.format(e)
+        else:
+            reason = 'see the message above'
         raise FasmParseError(
-            'Parse error - invalid value: {} (in {})'.format(
-                reason, filename))
+            'Parse error - {} (in {})'.format(reason, filename))
 
     return lines
 

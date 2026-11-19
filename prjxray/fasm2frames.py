@@ -13,12 +13,12 @@ from __future__ import print_function
 
 import fasm
 import argparse
-import io
 import json
 import os
 import os.path
 import csv
 import re
+import tempfile
 
 from collections import defaultdict
 
@@ -609,6 +609,12 @@ def run(
     dump_frm(f_out, frames)
 
 
+def _umask():
+    mask = os.umask(0)
+    os.umask(mask)
+    return mask
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=
@@ -649,28 +655,52 @@ def main():
     except ImportError:
         pass
 
-    # Only create the output file once the frames are complete, so that a
-    # failed run does not leave an empty or partial .frm behind.
-    frames_out = io.StringIO()
-    try:
-        run(
-            db_root=args.db_root,
-            part=args.part,
-            filename_in=args.fn_in,
-            f_out=frames_out,
-            sparse=args.sparse,
-            roi=args.roi,
-            debug=args.debug,
-            emit_pudc_b_pullup=args.emit_pudc_b_pullup)
-    except input_errors as e:
-        eprint('fasm2frames: error: {}'.format(e))
-        sys.exit(1)
+    run_args = dict(
+        db_root=args.db_root,
+        part=args.part,
+        filename_in=args.fn_in,
+        sparse=args.sparse,
+        roi=args.roi,
+        debug=args.debug,
+        emit_pudc_b_pullup=args.emit_pudc_b_pullup)
 
-    if args.fn_out:
-        with open(args.fn_out, 'w') as f:
-            f.write(frames_out.getvalue())
-    else:
-        sys.stdout.write(frames_out.getvalue())
+    # Output that is not a plain file (stdout, a symlink such as /dev/stdout,
+    # a pipe) is written directly. run() only writes the frames once they
+    # are complete, so a failed run writes nothing.
+    fn_out = args.fn_out
+    if not fn_out or os.path.islink(fn_out) or (os.path.exists(fn_out) and
+                                                not os.path.isfile(fn_out)):
+        try:
+            if fn_out:
+                with open(fn_out, 'w') as f:
+                    run(**run_args, f_out=f)
+            else:
+                run(**run_args, f_out=sys.stdout)
+        except input_errors as e:
+            eprint('fasm2frames: error: {}'.format(e))
+            sys.exit(1)
+        return
+
+    # Otherwise write to a temporary file next to the output and move it
+    # into place only once the frames are complete. A failed run removes the
+    # output instead, so that neither a partial .frm nor one from an earlier
+    # run is mistaken for its result.
+    fd, tmp_out = tempfile.mkstemp(
+        prefix='.' + os.path.basename(fn_out) + '.',
+        dir=os.path.dirname(os.path.abspath(fn_out)))
+    try:
+        with os.fdopen(fd, 'w') as f:
+            run(**run_args, f_out=f)
+        os.chmod(tmp_out, 0o666 & ~_umask())
+        os.replace(tmp_out, fn_out)
+    except BaseException as e:
+        os.unlink(tmp_out)
+        if os.path.isfile(fn_out):
+            os.unlink(fn_out)
+        if isinstance(e, input_errors):
+            eprint('fasm2frames: error: {}'.format(e))
+            sys.exit(1)
+        raise
 
 
 if __name__ == '__main__':

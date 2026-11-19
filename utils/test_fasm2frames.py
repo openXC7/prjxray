@@ -272,12 +272,15 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
                 "CLBLM_L_X10Y102.SLICEM_X0.ALUT.INIT[3:0] = 4'd99\n")
 
     def test_main_error(self):
-        '''main() reports an error without creating the output file'''
+        '''main() reports an error and removes the output file'''
         with tempfile.TemporaryDirectory() as d:
             fn_in = os.path.join(d, 'design.fasm')
             fn_out = os.path.join(d, 'design.frm')
             with open(fn_in, 'w') as f:
                 f.write('CLBLM_L_X10Y102.SLICEM_X0.NOPE\n')
+            # Output from an earlier run must not survive a failed one.
+            with open(fn_out, 'w') as f:
+                f.write('0x00000000 0x00000000\n')
             argv = [
                 'fasm2frames', '--db-root',
                 self.filename_test_data('db'), '--part', 'xc7a200tffg1156-1',
@@ -291,7 +294,7 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
             self.assertEqual(cm.exception.code, 1)
             self.assertIn('SLICEM_X0.NOPE not found', stderr.getvalue())
             self.assertNotIn('Traceback', stderr.getvalue())
-            self.assertFalse(os.path.exists(fn_out))
+            self.assertEqual(os.listdir(d), ['design.fasm'])
 
 
 if __name__ == '__main__':
