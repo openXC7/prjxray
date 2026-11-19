@@ -154,6 +154,37 @@ TEST(FramesTest, ReadFramesReadsFrame) {
 	EXPECT_EQ(frames.getFrames().begin()->second, with_ecc);
 }
 
+TEST(FramesTest, ReadFramesRefusesBadAddress) {
+	std::string line = "zz 0x00000001";
+	for (int i = 1; i < 101; i++) {
+		line += ",0x00000000";
+	}
+	Frames<Series7> frames;
+	EXPECT_NE(
+	    frames.readFrames(WriteFramesFile("badaddr.frm", line + "\n")), 0);
+}
+
+TEST(FramesTest, ReadFramesRefusesBadWord) {
+	std::string line = "0x00000002 0x00000001,zz";
+	for (int i = 2; i < 101; i++) {
+		line += ",0x00000000";
+	}
+	Frames<Series7> frames;
+	EXPECT_NE(
+	    frames.readFrames(WriteFramesFile("badword.frm", line + "\n")), 0);
+}
+
+TEST(FramesTest, ReadFramesRefusesEmptyLine) {
+	std::string line = "0x00000002 0x00000001";
+	for (int i = 1; i < 101; i++) {
+		line += ",0x00000000";
+	}
+	Frames<Series7> frames;
+	EXPECT_NE(frames.readFrames(
+	              WriteFramesFile("emptyline.frm", "\n" + line + "\n")),
+	          0);
+}
+
 TEST(FramesTest, ReadFramesRefusesMissingNewline) {
 	// 101 words, the newline cut off.
 	std::string line = "0x00000002 0x00000001";
