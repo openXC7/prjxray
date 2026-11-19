@@ -648,6 +648,9 @@ def main():
         fasm_assembler.FasmLookupError,
         fasm_assembler.FasmInconsistentBits,
         fasm_assembler.FasmParseError,
+        # A database or part that doesn't exist, or a file missing from it.
+        util.DatabaseError,
+        OSError,
     )
     try:
         from textx.exceptions import TextXSyntaxError
@@ -685,9 +688,15 @@ def main():
     # into place only once the frames are complete. A failed run removes the
     # output instead, so that neither a partial .frm nor one from an earlier
     # run is mistaken for its result.
-    fd, tmp_out = tempfile.mkstemp(
-        prefix='.' + os.path.basename(fn_out) + '.',
-        dir=os.path.dirname(os.path.abspath(fn_out)))
+    try:
+        fd, tmp_out = tempfile.mkstemp(
+            prefix='.' + os.path.basename(fn_out) + '.',
+            dir=os.path.dirname(os.path.abspath(fn_out)))
+    except OSError as e:
+        eprint(
+            'fasm2frames: error: can\'t write {}: {}'.format(
+                fn_out, e.strerror))
+        sys.exit(1)
     try:
         with os.fdopen(fd, 'w') as f:
             run(**run_args, f_out=f)

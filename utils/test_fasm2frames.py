@@ -292,6 +292,27 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
             self.assertNotIn('Traceback', stderr.getvalue())
             self.assertEqual(os.listdir(d), ['design.fasm'])
 
+    def test_main_missing_database(self):
+        '''main() reports a missing database or part without a traceback'''
+        fn_in = self.filename_test_data('ff_int.fasm')
+        for db_root, part, message in (
+            ('/nonexistent', 'xc7a200tffg1156-1', 'does not exist'),
+            (self.filename_test_data('db'), 'xc7nope',
+             'Part xc7nope not found'),
+        ):
+            with self.subTest(db_root=db_root, part=part):
+                argv = [
+                    'fasm2frames', '--db-root', db_root, '--part', part, fn_in
+                ]
+                stderr = StringIO()
+                with mock.patch.object(sys, 'argv', argv), \
+                        mock.patch.object(sys, 'stderr', stderr), \
+                        self.assertRaises(SystemExit) as cm:
+                    fasm2frames.main()
+                self.assertEqual(cm.exception.code, 1)
+                self.assertIn(message, stderr.getvalue())
+                self.assertNotIn('Traceback', stderr.getvalue())
+
 
 if __name__ == '__main__':
     unittest.main()

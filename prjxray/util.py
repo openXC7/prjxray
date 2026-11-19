@@ -92,15 +92,28 @@ def get_fabric():
     return ret
 
 
+class DatabaseError(AssertionError):
+    '''A mapping file or an entry in it is missing from the database.
+
+    This is an AssertionError because these checks used to be asserts.
+    '''
+    pass
+
+
+def check_mapping_file(filename):
+    if not os.path.isfile(filename):
+        raise DatabaseError("Mapping file {} does not exist".format(filename))
+
+
 def get_part_information(db_root, part):
     filename = os.path.join(db_root, "mapping", "parts.yaml")
-    assert os.path.isfile(filename), \
-        "Mapping file {} does not exist".format(filename)
+    check_mapping_file(filename)
     with open(filename, 'r') as stream:
         part_mapping = yaml.load(stream, Loader=yaml.FullLoader)
-    part = part_mapping.get(part, None)
-    assert part, "Part {} not found in {}".format(part, part_mapping)
-    return part
+    information = part_mapping.get(part, None)
+    if not information:
+        raise DatabaseError("Part {} not found in {}".format(part, filename))
+    return information
 
 
 def set_part_information(db_root, information):
@@ -113,12 +126,12 @@ def set_part_information(db_root, information):
 
 def get_part_resources(file_path, part):
     filename = os.path.join(file_path, "resources.yaml")
-    assert os.path.isfile(filename), \
-        "Mapping file {} does not exist".format(filename)
+    check_mapping_file(filename)
     with open(filename, 'r') as stream:
         res_mapping = yaml.load(stream, Loader=yaml.FullLoader)
     res = res_mapping.get(part, None)
-    assert res, "Part {} not found in {}".format(part, res_mapping)
+    if not res:
+        raise DatabaseError("Part {} not found in {}".format(part, filename))
     return res
 
 
@@ -132,21 +145,20 @@ def set_part_resources(file_path, information):
 
 def get_fabric_for_part(db_root, part):
     filename = os.path.join(db_root, "mapping", "devices.yaml")
-    assert os.path.isfile(filename), \
-        "Mapping file {} does not exist".format(filename)
+    check_mapping_file(filename)
     part = get_part_information(db_root, part)
     with OpenSafeFile(filename, 'r') as stream:
         device_mapping = yaml.load(stream, Loader=yaml.FullLoader)
     device = device_mapping.get(part['device'], None)
-    assert device, "Device {} not found in {}".format(
-        part['device'], device_mapping)
+    if not device:
+        raise DatabaseError(
+            "Device {} not found in {}".format(part['device'], filename))
     return device['fabric']
 
 
 def get_devices(db_root):
     filename = os.path.join(db_root, "mapping", "devices.yaml")
-    assert os.path.isfile(filename), \
-        "Mapping file {} does not exist".format(filename)
+    check_mapping_file(filename)
     with open(filename, 'r') as stream:
         device_mapping = yaml.load(stream, Loader=yaml.FullLoader)
     return device_mapping
@@ -154,8 +166,7 @@ def get_devices(db_root):
 
 def get_parts(db_root):
     filename = os.path.join(db_root, "mapping", "parts.yaml")
-    assert os.path.isfile(filename), \
-        "Mapping file {} does not exist".format(filename)
+    check_mapping_file(filename)
     with open(filename, 'r') as stream:
         part_mapping = yaml.load(stream, Loader=yaml.FullLoader)
     return part_mapping
