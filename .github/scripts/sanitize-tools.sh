@@ -80,6 +80,18 @@ expect_handled() {
 	run "$@" && echo "ok: $label (exit status $rc)"
 }
 
+# A run on input that must be rejected: the command must also fail.
+expect_error() {
+	local label=$1
+	run "$@" || return
+	if [ "$rc" -eq 0 ]; then
+		fail "$label succeeded, but should have failed"
+		cat "$log"
+	else
+		echo "ok: $label (exit status $rc)"
+	fi
+}
+
 # A bitread -y output must contain set bits.
 expect_bits() {
 	if ! grep -q '^bit_' "$1" 2> /dev/null; then
@@ -175,8 +187,8 @@ for frm in "$WORK"/bad-*.frm; do
 done
 
 # segmatch on generated segment data: 300 segments with random bits and
-# tags, where each tag's value is also given by one bit, so that every tag
-# has a candidate.
+# tags, where tag Tn is 1 exactly when bit B(1000+n) is set, so segmatch
+# must find that bit as the candidate for each of the 40 tags.
 python3 - "$WORK/seg.txt" <<'PY'
 import random, sys
 random.seed(1)
@@ -196,8 +208,11 @@ for opts in "" "-i" "-c 2 -m 1 -M 3"; do
 	# shellcheck disable=SC2086 # the options are meant to be split
 	expect_ok "segmatch ${opts:-(no options)}" "$TOOLS/segmatch" $opts \
 		-o "$WORK/seg.out" -k "$WORK/seg.bits" "$WORK/seg.txt"
-	if ! grep -q 'T0 ' "$WORK/seg.out" 2> /dev/null; then
-		fail "segmatch ${opts:-(no options)} found no candidates"
+	found=$(awk '$1 ~ /^T[0-9]+$/ && NF == 2 && \
+		$2 == "B" (1000 + substr($1, 2))' "$WORK/seg.out" 2> /dev/null |
+		wc -l)
+	if [ "$found" -ne 40 ]; then
+		fail "segmatch ${opts:-(no options)} found the right bit for $found of 40 tags"
 	fi
 done
 
@@ -211,11 +226,11 @@ printf 'seg\n' > "$WORK/badseg-no-seg.txt"
 printf 'seg S\nfoo\n' > "$WORK/badseg-unknown.txt"
 printf 'seg S\nbit B1\ntag T1 1\ntag T1 0\n' > "$WORK/badseg-conflict.txt"
 for seg in "$WORK"/badseg-*.txt; do
-	expect_handled "segmatch on $(basename "$seg")" "$TOOLS/segmatch" "$seg"
+	expect_error "segmatch on $(basename "$seg")" "$TOOLS/segmatch" "$seg"
 done
-expect_handled "segmatch with an unwritable -o" "$TOOLS/segmatch" \
+expect_error "segmatch with an unwritable -o" "$TOOLS/segmatch" \
 	-o "$WORK/missing/seg.out" "$WORK/seg.txt"
-expect_handled "segmatch with an unwritable -k" "$TOOLS/segmatch" \
+expect_error "segmatch with an unwritable -k" "$TOOLS/segmatch" \
 	-o "$WORK/seg.out" -k "$WORK/missing/seg.bits" "$WORK/seg.txt"
 
 echo "$runs runs, $failures failures"
