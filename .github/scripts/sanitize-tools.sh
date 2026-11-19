@@ -11,7 +11,8 @@
 # Run the C++ tools, built with -fsanitize=address,undefined, on the tool
 # test data: bitread/bits2rbt, xc7frames2bit and xc7patch round trips that
 # must give back the same bits, bittool, frame_address_decoder, truncated
-# bitstreams and malformed frames files.
+# bitstreams, malformed frames files, and segmatch on generated and
+# malformed segment data.
 #
 # Fails if any run produces an AddressSanitizer, LeakSanitizer or
 # UndefinedBehaviorSanitizer report, if a tool fails or produces no bits on
@@ -172,6 +173,50 @@ for frm in "$WORK"/bad-*.frm; do
 		--part_file="$PART" --part_name=test --frm_file="$frm" \
 		--output_file="$WORK/bad.bit"
 done
+
+# segmatch on generated segment data: 300 segments with random bits and
+# tags, where each tag's value is also given by one bit, so that every tag
+# has a candidate.
+python3 - "$WORK/seg.txt" <<'PY'
+import random, sys
+random.seed(1)
+with open(sys.argv[1], 'w') as f:
+    for s in range(300):
+        print('seg', 'SEG_%d' % (s % 200), file=f)
+        bits = set(random.sample(range(500), 40))
+        for t in random.sample(range(40), 15):
+            v = random.randint(0, 1)
+            if v:
+                bits.add(1000 + t)
+            print('tag', 'T%d' % t, v, file=f)
+        for b in sorted(bits):
+            print('bit', 'B%d' % b, file=f)
+PY
+for opts in "" "-i" "-c 2 -m 1 -M 3"; do
+	# shellcheck disable=SC2086 # the options are meant to be split
+	expect_ok "segmatch ${opts:-(no options)}" "$TOOLS/segmatch" $opts \
+		-o "$WORK/seg.out" -k "$WORK/seg.bits" "$WORK/seg.txt"
+	if ! grep -q 'T0 ' "$WORK/seg.out" 2> /dev/null; then
+		fail "segmatch ${opts:-(no options)} found no candidates"
+	fi
+done
+
+# Malformed segment data, and output files that can't be written.
+printf 'bit B1\n' > "$WORK/badseg-bit-first.txt"
+printf 'tag T1 1\n' > "$WORK/badseg-tag-first.txt"
+printf 'seg S\ntag T1 2\n' > "$WORK/badseg-tag-value.txt"
+printf 'seg S\ntag T1\n' > "$WORK/badseg-no-value.txt"
+printf 'seg S\nbit\n' > "$WORK/badseg-no-bit.txt"
+printf 'seg\n' > "$WORK/badseg-no-seg.txt"
+printf 'seg S\nfoo\n' > "$WORK/badseg-unknown.txt"
+printf 'seg S\nbit B1\ntag T1 1\ntag T1 0\n' > "$WORK/badseg-conflict.txt"
+for seg in "$WORK"/badseg-*.txt; do
+	expect_handled "segmatch on $(basename "$seg")" "$TOOLS/segmatch" "$seg"
+done
+expect_handled "segmatch with an unwritable -o" "$TOOLS/segmatch" \
+	-o "$WORK/missing/seg.out" "$WORK/seg.txt"
+expect_handled "segmatch with an unwritable -k" "$TOOLS/segmatch" \
+	-o "$WORK/seg.out" -k "$WORK/missing/seg.bits" "$WORK/seg.txt"
 
 echo "$runs runs, $failures failures"
 [ "$failures" -eq 0 ]
