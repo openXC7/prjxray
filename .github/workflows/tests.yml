@@ -63,8 +63,8 @@ jobs:
           persist-credentials: false
 
       # Install the package the way users do, in a clean venv and without
-      # the repo root on PYTHONPATH, and check that the console script starts
-      # and prints its usage.
+      # the repo root on PYTHONPATH, and check that the console scripts start
+      # and print their usage.
       - name: Install with pip and run the console scripts
         run: |
           set -eu
@@ -77,6 +77,8 @@ jobs:
               compat) "venv-$mode/bin/pip" install -e "$GITHUB_WORKSPACE" \
                   --config-settings editable_mode=compat ;;
             esac
-            "venv-$mode/bin/fasm2frames" --help > "help-$mode.txt"
-            grep -q '^usage: fasm2frames' "help-$mode.txt"
+            for tool in fasm2frames bit2fasm; do
+              "venv-$mode/bin/$tool" --help > "help-$mode-$tool.txt"
+              grep -q "^usage: $tool" "help-$mode-$tool.txt"
+            done
           done
