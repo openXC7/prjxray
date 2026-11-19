@@ -77,6 +77,11 @@ class BigEndianSpan {
 
 		iterator& operator++() {
 			bytes_ = bytes_.subspan(kBytesPerElement);
+			// Stop before a trailing partial word instead of
+			// reading past the end of the bytes.
+			if (bytes_.size() < kBytesPerElement) {
+				bytes_ = {};
+			}
 			return *this;
 		}
 
@@ -111,7 +116,12 @@ class BigEndianSpan {
 		return this->operator[](pos);
 	}
 
-	iterator begin() const { return iterator(bytes_); }
+	iterator begin() const {
+		if (bytes_.size() < kBytesPerElement) {
+			return end();
+		}
+		return iterator(bytes_);
+	}
 	iterator end() const { return iterator({}); }
 
        private:

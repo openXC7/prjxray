@@ -47,7 +47,7 @@ void dump_packets(BitstreamWriter<Spartan6> writer, bool nl = true) {
 
 // Special all 0's
 void AddType0(
-    std::vector<std::unique_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>&
+    std::vector<std::shared_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>&
         packets) {
 	// InitWithWords doesn't like type 0
 	/*
@@ -66,7 +66,7 @@ void AddType0(
 }
 
 void AddType1(
-    std::vector<std::unique_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>&
+    std::vector<std::shared_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>&
         packets) {
 	static std::vector<uint32_t> words{MakeType1(0x2, 0x3, 2), 0xAA, 0xBB};
 	absl::Span<uint32_t> word_span(words);
@@ -78,7 +78,7 @@ void AddType1(
 
 // Empty
 void AddType1E(
-    std::vector<std::unique_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>&
+    std::vector<std::shared_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>&
         packets) {
 	static std::vector<uint32_t> words{MakeType1(0x2, 0x3, 0)};
 	absl::Span<uint32_t> word_span(words);
@@ -110,7 +110,7 @@ void AddType2(Spartan6::ConfigurationPackage& packets) {
 
 // Empty packets should produce just the header
 TEST(BitstreamWriterTest, WriteHeader) {
-	std::vector<std::unique_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>
+	std::vector<std::shared_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>
 	    packets;
 
 	BitstreamWriter<Spartan6> writer(packets);
@@ -126,7 +126,7 @@ TEST(BitstreamWriterTest, WriteHeader) {
 }
 
 TEST(BitstreamWriterTest, WriteType0) {
-	std::vector<std::unique_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>
+	std::vector<std::shared_ptr<ConfigurationPacket<Spartan6::ConfRegType>>>
 	    packets;
 	AddType0(packets);
 	BitstreamWriter<Spartan6> writer(packets);

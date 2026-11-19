@@ -44,8 +44,11 @@ class Spartan6 : public Architecture {
        public:
 	using ConfRegType = Spartan6ConfigurationRegister;
 	using Part = spartan6::Part;
+	// shared_ptr rather than unique_ptr: the packets are subclasses of
+	// ConfigurationPacket, which has no virtual destructor, and a
+	// shared_ptr deletes them as the type they were created as.
 	using ConfigurationPackage =
-	    std::vector<std::unique_ptr<ConfigurationPacket<ConfRegType>>>;
+	    std::vector<std::shared_ptr<ConfigurationPacket<ConfRegType>>>;
 	using FrameAddress = spartan6::FrameAddress;
 	using WordType = uint16_t;
 	Spartan6() : Architecture("Spartan6") {}
@@ -57,7 +60,7 @@ class Series7 : public Architecture {
 	using ConfRegType = Series7ConfigurationRegister;
 	using Part = xc7series::Part;
 	using ConfigurationPackage =
-	    std::vector<std::unique_ptr<ConfigurationPacket<ConfRegType>>>;
+	    std::vector<std::shared_ptr<ConfigurationPacket<ConfRegType>>>;
 	using FrameAddress = xc7series::FrameAddress;
 	using WordType = uint32_t;
 	Series7() : Architecture("Series7") {}

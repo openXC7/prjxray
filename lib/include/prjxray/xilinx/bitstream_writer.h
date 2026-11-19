@@ -42,7 +42,7 @@ template <typename ArchType>
 class BitstreamWriter {
        public:
 	typedef std::vector<uint32_t> header_t;
-	typedef std::vector<std::unique_ptr<
+	typedef std::vector<std::shared_ptr<
 	    ConfigurationPacket<typename ArchType::ConfRegType>>>
 	    packets_t;
 	typedef std::vector<uint8_t> BitstreamHeader;

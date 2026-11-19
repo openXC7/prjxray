@@ -41,6 +41,22 @@ TEST(BigEndianSpanTest, Read32WithMultipleWords) {
 	EXPECT_EQ(words[1], static_cast<uint32_t>(0x04050607));
 }
 
+TEST(BigEndianSpanTest, IterateIgnoresTrailingPartialWord) {
+	// BitstreamReader copies the words out by iterating; a span whose
+	// length isn't a multiple of the word size must not read past its end.
+	std::vector<uint8_t> bytes{0x0, 0x1, 0x2, 0x3, 0x4, 0x5};
+	auto span = prjxray::make_big_endian_span<uint32_t>(bytes);
+	std::vector<uint32_t> words{span.begin(), span.end()};
+	ASSERT_EQ(words.size(), static_cast<size_t>(1));
+	EXPECT_EQ(words[0], static_cast<uint32_t>(0x00010203));
+}
+
+TEST(BigEndianSpanTest, IterateWithTooFewBytes) {
+	std::vector<uint8_t> bytes{0x0, 0x1, 0x2};
+	auto span = prjxray::make_big_endian_span<uint32_t>(bytes);
+	EXPECT_EQ(span.begin(), span.end());
+}
+
 TEST(BigEndianSpanTest, Write32) {
 	std::vector<uint8_t> bytes{0x0, 0x1, 0x2, 0x3};
 	auto words = prjxray::make_big_endian_span<uint32_t>(bytes);
