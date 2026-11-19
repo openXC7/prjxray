@@ -97,8 +97,7 @@ jobs:
         run: |
           git submodule update --init --depth 1 \
             third_party/abseil-cpp third_party/gflags \
-            third_party/googletest third_party/yaml-cpp \
-            third_party/sanitizers-cmake
+            third_party/googletest third_party/yaml-cpp
 
       # Build the C++ tools and tests with AddressSanitizer and
       # UndefinedBehaviorSanitizer, so that memory errors and undefined
