@@ -107,6 +107,14 @@ struct bool_vec {
 
 	bool get(int n) { return (data[n / 64] >> (n % 64)) & 1; }
 
+	// Like get(), but false for bits past the end instead of reading
+	// out of bounds (the vectors only grow to their final size once
+	// all input has been read).
+	bool test(int n) const {
+		return n < int(data.size() * 64) &&
+		       ((data[n / 64] >> (n % 64)) & 1);
+	}
+
 	void resize(int n) { data.resize((n + 63) / 64); }
 
 	int count() {
@@ -166,9 +174,40 @@ static std::string read_operand(std::istream& f,
 	return operand;
 }
 
+// Record that tag tag_idx has the given value (true for 1) in a segment,
+// rejecting a segment that gives the same tag both values.
+static void set_tag(segdata_t& sd,
+                    const std::string& filename,
+                    const std::string& segname,
+                    int tag_idx,
+                    bool value) {
+	auto& tags = value ? segdata_tags1(sd) : segdata_tags0(sd);
+	auto& other = value ? segdata_tags0(sd) : segdata_tags1(sd);
+	if (other.test(tag_idx))
+		input_error(filename, "tag " + tag_ids_r.at(tag_idx) +
+		                          " is both 0 and 1 in segment " +
+		                          segname);
+	tags.set(tag_idx);
+}
+
+// Flush and close an output file (or flush stdout), reporting any write
+// error so that a truncated output does not exit successfully.
+static bool finish_output(FILE* f, const std::string& name) {
+	bool failed = ferror(f) != 0;
+	if (f == stdout)
+		failed |= fflush(f) != 0;
+	else
+		failed |= fclose(f) != 0;
+	if (failed)
+		fprintf(stderr, "ERROR: can't write %s: %s\n", name.c_str(),
+		        strerror(errno));
+	return !failed;
+}
+
 void read_input(std::istream& f, std::string filename) {
 	string token;
 	segdata_t* segptr = nullptr;
+	string segname;
 
 	while (f >> token) {
 		if (token == "seg") {
@@ -184,6 +223,7 @@ void read_input(std::istream& f, std::string filename) {
 				token += buffer;
 			}
 			segptr = &segdata[token];
+			segname = token;
 			continue;
 		}
 
@@ -226,16 +266,10 @@ void read_input(std::istream& f, std::string filename) {
 				                " has value '" + token +
 				                "', expected 0 or 1");
 
-			auto& tags = token == "1" ? segdata_tags1(*segptr)
-			                          : segdata_tags0(*segptr);
-
-			tags.set(tag_idx);
+			bool value = token == "1";
+			set_tag(*segptr, filename, segname, tag_idx, value);
 
 			if (FLAGS_i) {
-				auto& inv_tags = token == "1"
-				                     ? segdata_tags0(*segptr)
-				                     : segdata_tags1(*segptr);
-
 				token = tag_ids_r.at(tag_idx) + "__INV";
 
 				if (tag_ids.count(token) == 0) {
@@ -244,7 +278,8 @@ void read_input(std::istream& f, std::string filename) {
 				}
 
 				int inv_tag_idx = tag_ids.at(token);
-				inv_tags.set(inv_tag_idx);
+				set_tag(*segptr, filename, segname, inv_tag_idx,
+				        !value);
 			}
 
 			continue;
@@ -406,6 +441,9 @@ int main(int argc, char** argv) {
 	for (auto& line : out_lines)
 		fprintf(f, "%s\n", line.c_str());
 
+	if (!finish_output(f, FLAGS_o.empty() ? "stdout" : FLAGS_o))
+		return 1;
+
 	if (cnt_candidates)
 		avg_candidates /= cnt_candidates;
 
@@ -428,6 +466,8 @@ int main(int argc, char** argv) {
 		std::sort(bit_ids_r.begin(), bit_ids_r.end());
 		for (auto bit : bit_ids_r)
 			fprintf(f, "bit %s\n", bit.c_str());
+		if (!finish_output(f, FLAGS_k))
+			return 1;
 	}
 
 	return 0;
