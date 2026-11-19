@@ -80,3 +80,41 @@ jobs:
             "venv-$mode/bin/fasm2frames" --help > "help-$mode.txt"
             grep -q '^usage: fasm2frames' "help-$mode.txt"
           done
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Only the libraries the C++ tools are built from.
+      - name: Checkout submodules
+        run: |
+          git submodule update --init --depth 1 \
+            third_party/abseil-cpp third_party/gflags \
+            third_party/googletest third_party/yaml-cpp \
+            third_party/sanitizers-cmake
+
+      # Build the C++ tools and tests with AddressSanitizer and
+      # UndefinedBehaviorSanitizer, so that memory errors and undefined
+      # behaviour fail the job instead of going unnoticed.
+      - name: Build with sanitizers
+        run: |
+          flags="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined"
+          cmake -S . -B build-sanitizers -DPRJXRAY_BUILD_TESTING=ON \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS="$flags" -DCMAKE_CXX_FLAGS="$flags" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+          cmake --build build-sanitizers -j"$(nproc)"
+
+      - name: Run the tests with sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build-sanitizers --output-on-failure
+
+      - name: Run the tools with sanitizers
+        run: .github/scripts/sanitize-tools.sh build-sanitizers
