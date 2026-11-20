@@ -3,6 +3,18 @@
   fabric: "xc7z020"
 "xc7z010":
   fabric: "xc7z010"
+# xc7z007s is the xc7z010 die with fewer resources enabled: Vivado reports the
+# identical 13440 tiles and 8590 sites for xc7z007sclg400-1 and
+# xc7z010clg400-1, and hardlinks their configuration data under
+# data/parts/xilinx/zynq/devint/zynq (frameData, paspd, tile2bfd, bramTileSites
+# and tiles.xml are all one inode), i.e. the same frame layout as well as the
+# same tile graph.  Only the binning differs -- LUT_ELEMENTS 14400 vs 17600,
+# DSP 66 vs 80, BLOCK_RAMS 50 vs 60 -- and only the JTAG IDCODE differs in the
+# part data (0x3723093 vs 0x3722093), which is the single field the
+# part.yaml/part.json below change from their xc7z010 counterparts.  This
+# mirrors xc7z035 -> xc7z045.
+"xc7z007s":
+  fabric: "xc7z010"
 "xc7z030":
   fabric: "xc7z030"
 "xc7z035":
