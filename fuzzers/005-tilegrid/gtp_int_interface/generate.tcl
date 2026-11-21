@@ -41,10 +41,6 @@ proc route_through_delay {} {
     set params_map [parse_csv]
 
     dict for { key value } $params_map {
-        if { $value == 0 } {
-            continue
-        }
-
         set net_name "PLL0LOCKEN_$key"
         set net [get_nets $net_name]
 
@@ -52,7 +48,21 @@ proc route_through_delay {} {
         set wire_parts [split $wire "/"]
 
         set gtp_int_tile [lindex $wire_parts 0]
-        set node [get_nodes -of_object [get_tiles $gtp_int_tile] -filter { NAME =~ "*DELAY42" }]
+
+        # Route the net through the interface IMUX in both cases: through the
+        # delay node for tag 1, straight for tag 0. Leaving the tag 0 case to
+        # the router let it take another path through the INT tiles, so INT
+        # PIP bits correlated with the tag as well. The IMUX wire is named
+        # GTPE2_INT_INTERFACE_IMUX42, GTPE2_LEFT_INT_INTERFACE_IMUX42 or
+        # GTPE2_R_INT_INTERFACE_IMUX42, depending on the tile type.
+        if { $value == 0 } {
+            set node [get_nodes -of_objects [get_wires -of_objects [get_tiles $gtp_int_tile] -filter { NAME =~ "*INT_INTERFACE_IMUX42" }]]
+        } else {
+            set node [get_nodes -of_objects [get_tiles $gtp_int_tile] -filter { NAME =~ "*DELAY42" }]
+        }
+        if { [llength $node] != 1 } {
+            error "Expected one node to route through in $gtp_int_tile for tag $value, got: $node"
+        }
 
         route_design -unroute -nets $net
         puts "Attempting to route net $net through $node."
