@@ -32,23 +32,23 @@ target_link_libraries(libprjxray absl::optional absl::variant absl::strings absl
 
 if (PRJXRAY_BUILD_TESTING)
 	add_executable(big_endian_span_test big_endian_span_test.cc)
-	target_link_libraries(big_endian_span_test libprjxray gtest_main)
+	target_link_libraries(big_endian_span_test libprjxray ${PRJXRAY_GTEST_MAIN})
 	add_test(NAME big_endian_span_test
 		 COMMAND big_endian_span_test)
 
 	add_executable(bit_ops_test bit_ops_test.cc)
-	target_link_libraries(bit_ops_test libprjxray gtest_main)
+	target_link_libraries(bit_ops_test libprjxray ${PRJXRAY_GTEST_MAIN})
 	add_test(NAME bit_ops_test
 		 COMMAND bit_ops_test)
 
 	add_executable(memory_mapped_file_test memory_mapped_file_test.cc)
-	target_link_libraries(memory_mapped_file_test libprjxray gtest_main)
+	target_link_libraries(memory_mapped_file_test libprjxray ${PRJXRAY_GTEST_MAIN})
 	add_test(NAME memory_mapped_file_test
 		 COMMAND memory_mapped_file_test
 		 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test_data)
 
 	add_executable(segbits_file_reader_test segbits_file_reader_test.cc)
-	target_link_libraries(segbits_file_reader_test libprjxray gtest_main)
+	target_link_libraries(segbits_file_reader_test libprjxray ${PRJXRAY_GTEST_MAIN})
 	add_test(NAME segbits_file_reader_test
 		 COMMAND segbits_file_reader_test
 		 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test_data)
@@ -68,7 +68,7 @@ if (PRJXRAY_BUILD_TESTING)
 		xilinx/tests/xc7series/part_test.cc
 		xilinx/tests/xc7series/row_test.cc
 		xilinx/tests/xc7series/frames_test.cc)
-	target_link_libraries(xilinx_xc7series_test libprjxray gtest_main)
+	target_link_libraries(xilinx_xc7series_test libprjxray ${PRJXRAY_GTEST_MAIN})
 	add_test(NAME xilinx_xc7series_test
 		 COMMAND xilinx_xc7series_test
 		 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test_data)
@@ -86,7 +86,7 @@ if (PRJXRAY_BUILD_TESTING)
 		xilinx/tests/spartan6/part_test.cc
 		xilinx/tests/spartan6/row_test.cc
 		xilinx/tests/spartan6/frames_test.cc)
-	target_link_libraries(xilinx_spartan6_test libprjxray gtest_main)
+	target_link_libraries(xilinx_spartan6_test libprjxray ${PRJXRAY_GTEST_MAIN})
 	add_test(NAME xilinx_spartan6_test
 		 COMMAND xilinx_spartan6_test
 		 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/test_data)
