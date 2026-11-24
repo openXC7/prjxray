@@ -89,6 +89,11 @@ with other unit combinations.  For example:
 
 (1e-3 * 1e-6) (Ohms * Farads) does equal (1e-9) seconds.
 
+The capacitance and resistance values in the database are not in such a set
+with its delays: Xilinx does not document their units, and read as
+femtofarads and ohms (see docs/dev_database/common/tile_type.rst) their
+product is in femtoseconds while the delays are in nanoseconds.
+
 """
 import enum
 from collections import namedtuple

@@ -99,11 +99,11 @@ characterized by the following attributes:
      First two elements are related to the *fast corner* of the technological process,
      the second two elements to the *slow corner*. The first element of the pair
      is the minimum value of the corner, the second describes the maximum value.
-     They are given in us (nanoseconds).
+     They are given in ns (nanoseconds).
 
-   - ``in_cap`` - the input capacitance of the :term:`PIP <PIP>` in uF (microfarads).
+   - ``in_cap`` - the input capacitance of the :term:`PIP <PIP>` (see `Timing units`_).
 
-   - ``res`` - the resistance of the :term:`PIP <PIP>` in mΩ (miliohms).
+   - ``res`` - the resistance of the :term:`PIP <PIP>` (see `Timing units`_).
 
 - ``dst_wire`` - the destination wire name
 
@@ -132,13 +132,13 @@ Every :term:`site <Site>` may be characterized by the following attributes:
   Every pin has its  name - ``<PIN_NAME>`` and may be described
   by the following attributes:
 
-   - ``cap`` - pin capacitance in uF (microfarads).
+   - ``cap`` - pin capacitance (see `Timing units`_).
 
    - ``delay`` - a four-element list, which contain information about the delay of pins.
      First two elements are related to the *fast corner* of the technological process,
      the second two elements to the *slow corner*. The first element of the pair
      is the minimum value of the corner, the second describes the maximum value.
-     They are given in us (nanoseconds).
+     They are given in ns (nanoseconds).
 
    - ``wire`` - wire associated with the pin
 
@@ -155,8 +155,22 @@ The "wires" section describes the wires located in the :term:`tile <Tile>`.
 Every wire has its name - ``<WIRE_NAME>`` and may be characterized
 by the following attributes:
 
-- ``cap`` - wire capacitance in uF (microfarads)
-- ``res`` - wire resistance in mΩ (miliohms).
+- ``cap`` - wire capacitance (see `Timing units`_)
+- ``res`` - wire resistance (see `Timing units`_).
+
+Timing units
+^^^^^^^^^^^^
+
+All delays are in nanoseconds.
+
+The capacitance and resistance values come from Vivado's speed models: the
+``CAP`` property, and the ``DRIVE`` property scaled by ``MAGIC`` in
+``fuzzers/074-dump_all/get_speed_model.tcl``. Xilinx does not document their
+units. Read as femtofarads (fF) and ohms (Ω), they give RC products of around
+10 picoseconds, which fits the delays. For example, the artix7 PIP
+``INT_L.NL1END0->>NE2BEG0`` has ``in_cap`` 8.473 and ``res`` 1185.1, so about
+10 ps, and delays of 0.033 to 0.134 ns. nextpnr's chipdb generator reads them
+as fF and Ω.
 
 Other
 ^^^^^
