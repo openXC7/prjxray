@@ -76,6 +76,36 @@ Build the C++ tools, in the prjxray root directory run:
 make build
 ```
 
+The executables (for example `xc7frames2bit`) are placed in `build/tools` and
+are not added to `PATH` automatically. Choose one of the following to make
+them available outside the prjxray environment:
+
+(Option 1) - Add the build directory to `PATH` (nothing is installed):
+
+```bash
+export PATH=$PWD/build/tools:$PATH
+```
+
+Add this line to your shell profile to make it permanent. Sourcing
+`settings/<device>.sh` in Step 7 sets `XRAY_TOOLS_DIR` to `build/tools`, but it
+does not modify `PATH`, so exported commands still need this step.
+
+(Option 2) - Install the tools with `make install`:
+
+```bash
+make install INSTALL_DIR=/path/to/prefix
+export PATH=/path/to/prefix/usr/local/bin:$PATH
+```
+
+`INSTALL_DIR` is passed to CMake as `DESTDIR`; with the default install prefix
+of `/usr/local` the binaries end up in `<INSTALL_DIR>/usr/local/bin`. To
+install system-wide into `/usr/local/bin`, run make as root. The Makefile
+refuses to run as root unless `ALLOW_ROOT` is set:
+
+```bash
+sudo make install ALLOW_ROOT=1
+```
+
 ### Step 5: ###
 Choose one of the following options:
 
