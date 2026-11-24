@@ -42,10 +42,6 @@ proc route_through_delay {} {
     set nets [get_nets]
 
     dict for { key value } $params_map {
-        if { $value == 0 } {
-            continue
-        }
-
         foreach net $nets {
             set wire [get_wires -of_objects $net -filter {TILE_NAME =~ "*PCIE_INT_INTERFACE*" && NAME =~ "*OUT0*"}]
 
@@ -56,7 +52,21 @@ proc route_through_delay {} {
             set wire_parts [split $wire "/"]
 
             set pcie_int_tile [lindex $wire_parts 0]
-            set node [get_nodes -of_object [get_tiles $pcie_int_tile] -filter { NAME =~ "*DELAY0" }]
+
+            # Route the net through the interface IMUX in both cases: through
+            # the delay node for tag 1, straight for tag 0. Leaving the tag 0
+            # case to the router let it take another path through the INT
+            # tiles, so INT PIP bits correlated with the tag as well. The IMUX
+            # wire is named PCIE_INT_INTERFACE_IMUX0 or
+            # PCIE_INT_INTERFACE_IMUX_L0, depending on the tile type.
+            if { $value == 0 } {
+                set node [get_nodes -of_objects [get_wires -of_objects [get_tiles $pcie_int_tile] -filter { NAME =~ "*IMUX0" || NAME =~ "*IMUX_L0" }]]
+            } else {
+                set node [get_nodes -of_objects [get_tiles $pcie_int_tile] -filter { NAME =~ "*DELAY0" }]
+            }
+            if { [llength $node] != 1 } {
+                error "Expected one node to route through in $pcie_int_tile for tag $value, got: $node"
+            }
 
             route_design -unroute -nets $net
             puts "Attempting to route net $net through $node."
