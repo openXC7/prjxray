@@ -27,7 +27,7 @@ class OutPinTiming(namedtuple('OutPinTiming', 'delays drive_resistance')):
     delays : dicts of PvtCorner to IntristicDelay
         Intristic delay of output pin.
     drive_resistance : float
-        Resistance of drive output pin (milliOhms).
+        Resistance of drive output pin (kiloohms).
 
     """
     pass
@@ -41,7 +41,7 @@ class InPinTiming(namedtuple('InPinTiming', 'delays capacitance')):
     delays : dicts of PvtCorner to IntristicDelay
         Intristic delay of input pin.
     capacitance : float
-        Capacitance of input pints (microFarads).
+        Capacitance of input pins (picofarads).
 
     """
     pass
@@ -56,9 +56,9 @@ class PipTiming(namedtuple('PipTiming',
     delays : dicts of PvtCorner to IntristicDelay
         Intristic delay of pip.
     internal_capacitance : float
-        Capacitance (microFarads) of pip (which is only seen if pip is used).
+        Capacitance (picofarads) of pip (which is only seen if pip is used).
     drive_resistance : float
-        Resistance of drive output pin (milliOhms).
+        Resistance of drive output pin (kiloohms).
 
     """
     pass

@@ -20,7 +20,8 @@ set fp [open $filename w]
 
 set indices [split $file_data "\n"]
 
-# Convert DRIVE from ??? units to 10^(-3 to -6) Ohms
+# Scale factor for DRIVE. Its origin and the units of the result are not
+# documented; see docs/dev_database/common/tile_type.rst, "Timing units".
 set MAGIC 0.6875
 
 proc get_speed_model_name {name} {

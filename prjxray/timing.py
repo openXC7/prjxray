@@ -89,10 +89,10 @@ with other unit combinations.  For example:
 
 (1e-3 * 1e-6) (Ohms * Farads) does equal (1e-9) seconds.
 
-The capacitance and resistance values in the database are not in such a set
-with its delays: Xilinx does not document their units, and read as
-femtofarads and ohms (see docs/dev_database/common/tile_type.rst) their
-product is in femtoseconds while the delays are in nanoseconds.
+prjxray.tile loads the database values in such a set: it divides the
+capacitances and resistances by 1000, which turns the database's femtofarads
+and ohms into picofarads and kiloohms, and leaves the delays in nanoseconds.
+See docs/dev_database/common/tile_type.rst.
 
 """
 import enum
