@@ -18,16 +18,18 @@ from collections import OrderedDict
 def extract_numbers(s):
     """
     >>> extract_numbers("CLK_HROW_WR10END2_3")
-    ('CLK_HROW_WR', 10, 'END', 2, '_', 3)
+    ((1, 'CLK_HROW_WR'), (0, 10), (1, 'END'), (0, 2), (1, '_'), (0, 3))
     >>> extract_numbers("VBRK_WR1END2")
-    ('VBRK_WR', 1, 'END', 2)
+    ((1, 'VBRK_WR'), (0, 1), (1, 'END'), (0, 2))
+    >>> extract_numbers("A100") > extract_numbers("100B")
+    True
     """
     bits = []
     for m in re.finditer("([^0-9]*)([0-9]*)", s):
         if m.group(1):
-            bits.append(m.group(1))
+            bits.append((1, m.group(1)))
         if m.group(2):
-            bits.append(int(m.group(2)))
+            bits.append((0, int(m.group(2))))
     return tuple(bits)
 
 
@@ -57,6 +59,10 @@ def sort(data):
     Don't mangle "pairs"
     >>> sort([('b', 'c'), ('2', '1')])
     (('b', 'c'), ('2', '1'))
+
+    Handle mixed digit-prefixed and text-prefixed dictionary keys
+    >>> list(sort({'A100': 1, '100B': 2, '20B': 3}).items())
+    [('20B', 3), ('100B', 2), ('A100', 1)]
     """
 
     def key(o):
