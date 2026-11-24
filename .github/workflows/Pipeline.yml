@@ -67,8 +67,13 @@ jobs:
         with:
           node-version: 24
 
+      # No install scripts, and without the license server secrets: the
+      # dependencies of diff2html-cli are not pinned.
       - name: Install diff2html
-        run: npm install --global --no-fund --no-audit diff2html-cli@5.2.15
+        run: npm install --global --ignore-scripts --no-fund --no-audit diff2html-cli@5.2.15
+        env:
+          GHA_SSH_TUNNEL_KEY: ""
+          GHA_SSH_TUNNEL_CONFIG: ""
 
       - name: Xilinx Setup
         run: |
