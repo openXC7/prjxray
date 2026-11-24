@@ -427,6 +427,46 @@ def should_run_submake(make_flags):
     return not bool(r.groups()[0])
 
 
+def jobserver_fds(make_flags):
+    """Return the jobserver file descriptors a child make must inherit.
+
+    See https://www.gnu.org/software/make/manual/html_node/POSIX-Jobserver.html#POSIX-Jobserver  # noqa
+
+    Before GNU make 4.4 the jobserver is a pipe, and its two file
+    descriptors are given in MAKEFLAGS as --jobserver-fds=R,W (make < 4.2)
+    or --jobserver-auth=R,W. They must stay open in the child.
+
+    >>> jobserver_fds('')
+    []
+    >>> jobserver_fds(' -j8 --jobserver-fds=3,4 -j')
+    [3, 4]
+    >>> jobserver_fds(' -j8 --jobserver-auth=3,4')
+    [3, 4]
+
+    GNU make 4.4 and later use a named fifo by default. The child make opens
+    it by its path from the inherited MAKEFLAGS, so there is nothing to pass.
+
+    >>> jobserver_fds('-j8 --jobserver-auth=fifo:/tmp/GMfifo8785')
+    []
+    """
+    if '--jobserver-auth=fifo:' in make_flags:
+        return []
+    if '--jobserver-fds' not in make_flags and \
+            '--jobserver-auth' not in make_flags:
+        return []
+
+    job_re = re.search(
+        '--jobserver-(?:fds|auth)=([0-9]+),([0-9]+)', make_flags)
+    assert job_re, make_flags
+    job_rd, job_wr = job_re.groups()
+
+    job_rd = int(job_rd)
+    job_wr = int(job_wr)
+    assert job_rd > 2, (job_rd, job_wr, make_flags)
+    assert job_wr > 2, (job_rd, job_wr, make_flags)
+    return [job_rd, job_wr]
+
+
 def main(argv):
     fuzzers_dir = os.path.abspath(os.path.dirname(__file__))
 
@@ -542,22 +582,7 @@ def run_fuzzer(fuzzer_name, fuzzer_dir, fuzzer_logdir, logger, will_retry):
     stderr_fd = open(fuzzer_stderr, "a")
 
     # Play nice with make's jobserver.
-    # See https://www.gnu.org/software/make/manual/html_node/POSIX-Jobserver.html#POSIX-Jobserver  # noqa
-    job_fds = []
-    if '--jobserver-fds' in make_flags or '--jobserver-auth' in make_flags:
-        job_re = re.search(
-            '--jobserver-(?:fds|auth)=([0-9]+),([0-9]+)', make_flags)
-        assert job_re, make_flags
-        job_rd, job_wr = job_re.groups()
-
-        # Make copies of jobserver FDs in case a retry is needed.
-
-        job_rd = int(job_rd)
-        job_wr = int(job_wr)
-        assert job_rd > 2, (job_rd, job_wr, make_flags)
-        assert job_wr > 2, (job_rd, job_wr, make_flags)
-        job_fds.append(job_rd)
-        job_fds.append(job_wr)
+    job_fds = jobserver_fds(make_flags)
 
     p = None
     try:
