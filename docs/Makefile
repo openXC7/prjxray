@@ -28,39 +28,40 @@ livehtml:
 .PHONY: help livehtml Makefile
 
 # Update fuzzer / minitest markdown links.
-fuzzers-links:
-	@mkdir -p $(MAKEDIR)/db_dev_process/fuzzers
-	@cd $(MAKEDIR)/db_dev_process/fuzzers && rm -f *.md
-	@cd $(MAKEDIR)/db_dev_process/fuzzers && \
-		for i in ../../../fuzzers/*; do \
+#
+# $(call update-links,DIR) links every DIR/*/README.md into
+# db_dev_process/DIR as NAME.md, NAME being the directory name without its
+# NNN- prefix. Only missing links are created and only dangling ones are
+# removed, so the links that are already right are left untouched and
+# sphinx-autobuild does not rebuild their pages on every run.
+define update-links
+	@mkdir -p $(MAKEDIR)/db_dev_process/$(1)
+	@cd $(MAKEDIR)/db_dev_process/$(1) && \
+		for l in *.md; do \
+			if [ -L $$l ] && [ ! -e $$l ]; then \
+				echo "Removing stale $$l"; \
+				rm -f $$l; \
+			fi; \
+		done; \
+		for i in ../../../$(1)/*; do \
 			n=$$(basename $$i | sed -e's/^[0-9][0-9][0-9]-//'); \
 			if [ ! -d $$i ]; then \
 				continue; \
 			fi; \
-			if [ -e $$i/README.md ]; then \
+			if [ ! -e $$i/README.md ]; then \
+				echo "Missing $$i/README.md"; \
+			elif [ ! -e $${n}.md ]; then \
 				echo "Linking $$i/README.md"; \
 				ln -s $$i/README.md $${n}.md; \
-			else \
-				echo "Missing $$i/README.md"; \
 			fi; \
 		done
+endef
+
+fuzzers-links:
+	$(call update-links,fuzzers)
 
 minitests-links:
-	@mkdir -p $(MAKEDIR)/db_dev_process/minitests
-	@cd  $(MAKEDIR)/db_dev_process/minitests && rm -f *.md
-	@cd  $(MAKEDIR)/db_dev_process/minitests && \
-		for i in ../../../minitests/*; do \
-			n=$$(basename $$i | sed -e's/^[0-9][0-9][0-9]-//'); \
-			if [ ! -d $$i ]; then \
-				continue; \
-			fi; \
-			if [ -e $$i/README.md ]; then \
-				echo "Linking $$i/README.md"; \
-				ln -s $$i/README.md $${n}.md; \
-			else \
-				echo "Missing $$i/README.md"; \
-			fi; \
-		done
+	$(call update-links,minitests)
 
 links: fuzzers-links minitests-links
 	@true
