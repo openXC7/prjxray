@@ -31,8 +31,8 @@ livehtml:
 #
 # $(call update-links,DIR) links every DIR/*/README.md into
 # db_dev_process/DIR as NAME.md, NAME being the directory name without its
-# NNN- prefix. Only missing links are created and only dangling ones are
-# removed, so the links that are already right are left untouched and
+# NNN- prefix. Only missing or wrong links are (re)created and only dangling
+# ones are removed, so the links that are already right are left untouched and
 # sphinx-autobuild does not rebuild their pages on every run.
 define update-links
 	@mkdir -p $(MAKEDIR)/db_dev_process/$(1)
@@ -53,6 +53,10 @@ define update-links
 			elif [ ! -e $${n}.md ]; then \
 				echo "Linking $$i/README.md"; \
 				ln -s $$i/README.md $${n}.md; \
+			elif [ -L $${n}.md ] && \
+					[ "$$(readlink $${n}.md)" != "$$i/README.md" ]; then \
+				echo "Relinking $$i/README.md"; \
+				ln -sfn $$i/README.md $${n}.md; \
 			fi; \
 		done
 endef
