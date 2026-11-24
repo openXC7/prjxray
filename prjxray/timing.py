@@ -89,6 +89,11 @@ with other unit combinations.  For example:
 
 (1e-3 * 1e-6) (Ohms * Farads) does equal (1e-9) seconds.
 
+prjxray.tile loads the database values in such a set: it divides the
+capacitances and resistances by 1000, which turns the database's femtofarads
+and ohms into picofarads and kiloohms, and leaves the delays in nanoseconds.
+See docs/dev_database/common/tile_type.rst.
+
 """
 import enum
 from collections import namedtuple

@@ -99,11 +99,11 @@ characterized by the following attributes:
      First two elements are related to the *fast corner* of the technological process,
      the second two elements to the *slow corner*. The first element of the pair
      is the minimum value of the corner, the second describes the maximum value.
-     They are given in us (nanoseconds).
+     They are given in ns (nanoseconds).
 
-   - ``in_cap`` - the input capacitance of the :term:`PIP <PIP>` in uF (microfarads).
+   - ``in_cap`` - the input capacitance of the :term:`PIP <PIP>` (see `Timing units`_).
 
-   - ``res`` - the resistance of the :term:`PIP <PIP>` in mΩ (miliohms).
+   - ``res`` - the resistance of the :term:`PIP <PIP>` (see `Timing units`_).
 
 - ``dst_wire`` - the destination wire name
 
@@ -132,13 +132,15 @@ Every :term:`site <Site>` may be characterized by the following attributes:
   Every pin has its  name - ``<PIN_NAME>`` and may be described
   by the following attributes:
 
-   - ``cap`` - pin capacitance in uF (microfarads).
+   - ``cap`` - capacitance of an input pin (see `Timing units`_).
+
+   - ``res`` - drive resistance of an output pin (see `Timing units`_).
 
    - ``delay`` - a four-element list, which contain information about the delay of pins.
      First two elements are related to the *fast corner* of the technological process,
      the second two elements to the *slow corner*. The first element of the pair
      is the minimum value of the corner, the second describes the maximum value.
-     They are given in us (nanoseconds).
+     They are given in ns (nanoseconds).
 
    - ``wire`` - wire associated with the pin
 
@@ -155,12 +157,38 @@ The "wires" section describes the wires located in the :term:`tile <Tile>`.
 Every wire has its name - ``<WIRE_NAME>`` and may be characterized
 by the following attributes:
 
-- ``cap`` - wire capacitance in uF (microfarads)
-- ``res`` - wire resistance in mΩ (miliohms).
+- ``cap`` - wire capacitance (see `Timing units`_)
+- ``res`` - wire resistance (see `Timing units`_).
 
 Other
 ^^^^^
 - ``tile_type`` - indicates the type of the tile
+
+Timing units
+^^^^^^^^^^^^
+
+All delays are in nanoseconds.
+
+The capacitance and resistance values are copied from Vivado's speed models by
+``fuzzers/074-dump_all/get_speed_model.tcl``:
+
+- PIP ``in_cap``: the ``IN_CAP`` property.
+- PIP ``res``: ``DRIVE`` multiplied by ``MAGIC`` (0.6875) for buffered PIPs,
+  ``RES`` for pass-transistor PIPs (zero in the current databases).
+- Site pin ``cap`` (input pins): ``CAP``. Site pin ``res`` (output pins): the
+  driver's ``DRIVE`` multiplied by ``MAGIC``.
+- Wire ``cap`` and ``res``: ``WIRE_CAP`` and ``WIRE_RES``.
+
+Xilinx does not document the units of these properties. nextpnr's chipdb
+generator treats them as femtofarads (fF) and ohms (Ω), and so does prjxray:
+``prjxray.tile`` divides both by 1000 on load, giving picofarads and kiloohms,
+whose product is a nanosecond like the delays. As a plausibility
+check, the drive resistance times the input capacitance of a buffered PIP then
+comes to about 10 to 30 picoseconds: for example, the artix7 PIP
+``INT_L.NL1END0->>NE2BEG0`` has ``in_cap`` 8.473 and ``res`` 1185.1, or about
+10 ps, and delays of 0.033 to 0.134 ns. Only the products are constrained by
+this; the split between the capacitance and the resistance unit is a
+convention.
 
 Example
 -------
