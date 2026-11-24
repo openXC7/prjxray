@@ -60,6 +60,16 @@ jobs:
             xsltproc \
             sudo \
 
+      # .github/scripts/db.sh renders the database diff with diff2html into
+      # diff.html and diff.json, which are uploaded below. focal's own
+      # Node.js (v10) is too old for diff2html-cli, which needs 16 or later.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install diff2html
+        run: npm install --global --no-fund --no-audit diff2html-cli@5.2.15
+
       - name: Xilinx Setup
         run: |
           git config --global --add safe.directory /root/prjxray/prjxray
