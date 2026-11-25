@@ -16,23 +16,16 @@ FIXED := \
 	build/specimen_cal_s0 \
 	build/specimen_cal_s1 \
 	build/specimen_neg_unused \
-	build/specimen_neg_unconsumed \
-	build/specimen_neg_const_ce
+	build/specimen_neg_const_ce \
+	build/specimen_probe_above
 SPECIMENS := $(RAND) $(FIXED)
 SPECIMENS_OK := $(addsuffix /OK,$(SPECIMENS))
 
-# probe_above asks whether a BUFMR can drive a BUFR in the region above.
-# It is not part of `make database`: if Vivado cannot route it, the
-# specimen fails, and that answer must not stop the campaign.
-PROBE := build/specimen_probe_above
-
 all: database
 
-$(SPECIMENS_OK) $(PROBE)/OK:
+$(SPECIMENS_OK):
 	mkdir -p build
 	+bash $(FUZDIR)/generate.sh $(subst /OK,,$@)
-
-probe: $(PROBE)/OK
 
 # -c 2 as 045 uses for the HCLK_CMT mux positions.  Not lowered to make a
 # row resolve.
@@ -77,4 +70,4 @@ run:
 clean:
 	rm -rf build run.ok
 
-.PHONY: all database probe gate pushdb run clean
+.PHONY: all database gate pushdb run clean

@@ -28,7 +28,6 @@ case "$(basename "$SPECDIR")" in
     specimen_cal_s0) export FUZZ_MODE=cal_s0 ;;
     specimen_cal_s1) export FUZZ_MODE=cal_s1 ;;
     specimen_neg_unused) export FUZZ_MODE=neg_unused ;;
-    specimen_neg_unconsumed) export FUZZ_MODE=neg_unconsumed ;;
     specimen_neg_const_ce) export FUZZ_MODE=neg_const_ce ;;
     specimen_probe_above) export FUZZ_MODE=probe_above ;;
     *) export FUZZ_MODE="${FUZZ_MODE:-campaign}" ;;

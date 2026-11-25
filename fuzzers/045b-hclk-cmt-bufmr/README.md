@@ -23,13 +23,20 @@ Measured with Vivado 2025.2 on xc7a100tcsg324-1 and xc7a35tcpg236-1:
   `CMT_TOP_*_UPPER_B`, no PHASER cell) → `HCLK_CMT_PHASERIN_RCLK<k>` →
   `HCLK_CMT_MUX_PHSR_PERFCLK<m>` → `HCLK_IOI_IOCLK_PLL<m>` → BUFIO.I and
   BUFR.I. A BUFR in the region below is reached through the PHASER_IN of
-  that region's CMT, over `PHASERREF_ABOVE`.
+  that region's CMT, over `PHASERREF_ABOVE`; one in the region above,
+  through the PHASER_IN of the CMT above, over `PHASERREF_BELOW`. The
+  `PHSR_PERFCLK` pip is then in the other region's HCLK_CMT.
 - Each BUFMRCE site has one dedicated input: site 0 (`INP0`) takes
   `CCIO0`, site 1 (`INP1`) takes `CCIO3`. A BUFMR on the other site gets
   its clock through the fabric (`MUX_CLKINT_*`), without a warning.
 - A BUFMR and a BUFMRCE with CE tied active (`CE=1`, or `CE=0` with
-  `IS_CE_INVERTED=1`) give identical bitstreams: Vivado folds a constant
-  CE away.
+  `IS_CE_INVERTED=1`) and the default `CE_TYPE=SYNC`, `INIT_OUT=0` give
+  identical bitstreams: Vivado folds the inversion into the constant.
+  `CE_TYPE` and `INIT_OUT` are not folded: a BUFMRCE with a constant CE,
+  `ASYNC` and `INIT_OUT=1` sets two bits a BUFMR doesn't.
+- A BUFMR whose `O` drives nothing cannot be built: DRC REQP-1936 only
+  lets `BUFMR/O` drive `BUFR/I`, `BUFIO/I` and the PHASER reference
+  clocks.
 - The PHASER_IN route-through bits are in `CMT_TOP_*_UPPER_B` /
   `*_LOWER_T`, which have no `bits` entry in the tilegrid. This fuzzer
   does not solve them; it only needs Vivado to route through them.
@@ -42,8 +49,8 @@ Measured with Vivado 2025.2 on xc7a100tcsg324-1 and xc7a35tcpg236-1:
 |---|---|
 | `cal_s0` / `cal_s1` | one-hot: only BUFMRCE site 0 (or 1) of every HCLK_CMT, a BUFMR fed from its own dedicated pad, driving one BUFR in its own region |
 | `neg_unused` | no BUFMR; every dedicated pad drives a BUFR directly, so `CCIOn_ACTIVE` without the BUFMR input pip |
-| `neg_unconsumed` | `cal_s0`'s BUFMRs with `O` left open |
 | `neg_const_ce` | `cal_s0`'s shape with a BUFMRCE whose CE is a constant, `IS_CE_INVERTED=1`, `CE_TYPE=ASYNC`, `INIT_OUT=1` |
+| `probe_above` | `cal_s0`'s shape with each BUFR in the region above |
 
 A randomised specimen picks, per BUFMRCE site:
 
@@ -53,14 +60,13 @@ A randomised specimen picks, per BUFMRCE site:
   fabric flop, and random `CE_TYPE`, `IS_CE_INVERTED` and `INIT_OUT`;
 - a source: the site's dedicated pad, a fabric flop, or a BUFG;
 - a destination: a BUFR in the BUFMR's own region, or in the region
-  below.
+  below or above.
+
+A site whose destination has no free BUFR is left unused, since a BUFMR
+must drive something.
 
 Every BUFR clocks two flops in its region. Only HR banks (`HCLK_IOI3`) are
 used for now.
-
-`make probe` builds `probe_above`: `cal_s0`'s shape with each BUFR in the
-region above. It is not part of `make database`, because whether Vivado
-can route that at all is the question it asks.
 
 ## Tags
 
@@ -70,12 +76,12 @@ From generate.tcl's dumps of what Vivado placed and routed
 - `HCLK_CMT_BUFMR_INP<n>.<src>` and every pip into
   `HCLK_CMT_MUX_PHSR_PERFCLK<m>`: 1 when routed in that tile, else 0.
 - `BUFMRCE.BUFMRCE_X0Y<n>.IN_USE`: 1 when a BUFMR cell is on the site and
-  its output is routed, 0 when no cell is on it. A placed cell whose
-  output is unrouted (`neg_unconsumed`) gets no tag, until that specimen
-  has been read to see what Vivado sets for it.
-- `ZINV_CE`, `CE_TYPE.ASYNC`, `INIT_OUT`: only for a BUFMRCE whose CE is
-  driven by a fabric flop, and 0 on an unused site. A constant CE is
-  folded away, so those cells get none of the three.
+  its output is routed, 0 when no cell is on it.
+- `CE_TYPE.ASYNC`, `INIT_OUT`: for every used cell, a BUFMR counting as
+  `SYNC` and 0.
+- `ZINV_CE`: only for a BUFMRCE whose CE is driven by a fabric flop,
+  since a constant CE absorbs the inversion.
+- All four are 0 on an unused site.
 
 The names follow BUFHCE's rows in `segbits_clk_hrow_*.db`.
 

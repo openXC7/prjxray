@@ -24,11 +24,13 @@
 #                       tile, a BUFMR fed from its own dedicated pad, driving
 #                       one BUFR in its own region
 #   neg_unused          no BUFMR; every dedicated pad drives a BUFR directly
-#   neg_unconsumed      cal_s0's BUFMRs with O left open
 #   neg_const_ce        cal_s0's shape with a BUFMRCE whose CE is a constant,
 #                       IS_CE_INVERTED=1, CE_TYPE=ASYNC and INIT_OUT=1
 #   probe_above         cal_s0's shape, but each BUFMR drives a BUFR in the
-#                       region above (whether Vivado can route that at all)
+#                       region above
+#
+# A BUFMR whose O drives nothing cannot be built: Vivado's DRC REQP-1936
+# only lets BUFMR/O drive BUFR/I, BUFIO/I and the PHASER reference clocks.
 #
 # params.json records, per BUFMR cell, what top.py asked for; generate.py
 # tags from the sites and pips Vivado reports, not from this file alone.
@@ -104,10 +106,28 @@ def paired_hclk_ioi(grid, tile_name):
 
 
 def bonded_sites():
-    """IOB sites the package bonds out; a LOC on any other one fails."""
+    """{site: tile} of the IOB sites the package bonds out.
+
+    A LOC on any other IOB fails.
+    """
     fn = os.path.join(util.get_db_root(), util.get_part(), "package_pins.csv")
     with open(fn) as f:
-        return set(row["site"] for row in csv.DictReader(f))
+        return {row["site"]: row["tile"] for row in csv.DictReader(f)}
+
+
+def gclk_site(bonded, cmts):
+    """An HR pad for the global clock that is none of the CMTs' CCIO pads.
+
+    The BUFG's input needs a LOC and an IOSTANDARD like every other pad,
+    or write_bitstream stops on DRC NSTD-1 / UCIO-1.
+    """
+    ccio = set(p for c in cmts for p in c["pads"].values())
+    for site in sorted(bonded):
+        if not site.startswith("IOB_") or site in ccio:
+            continue
+        if bonded[site].startswith(("LIOB33", "RIOB33")):
+            return site
+    return None
 
 
 def gen_cmts(db, grid):
@@ -188,7 +208,8 @@ def choose_source():
 
 
 class Design(object):
-    def __init__(self, grid):
+    def __init__(self, grid, gclk_site):
+        self.gclk_site = gclk_site
         self.blocks = []
         self.num_pads = 0
         self.slices = slices_by_region(grid)
@@ -250,10 +271,12 @@ class Design(object):
 """.format(n=name, i=i, s=s))
         return site
 
-    def bufmr(self, site, cell, src, ce_sig, name, consumed=True):
-        out = ".O({}_o)".format(name) if consumed else ""
-        if consumed:
-            self.blocks.append("    wire {}_o;".format(name))
+    def has_free_bufr(self, cmt):
+        return any(s not in self.used_bufr for s in cmt["bufrs"])
+
+    def bufmr(self, site, cell, src, ce_sig, name):
+        out = ".O({}_o)".format(name)
+        self.blocks.append("    wire {}_o;".format(name))
         if cell["cell"] == "BUFMR":
             self.blocks.append(
                 """
@@ -277,12 +300,17 @@ class Design(object):
         npads = max(self.num_pads, 1)
         ports = ["input [{}:0] pads".format(npads - 1)]
         if self.need_gclk:
+            assert self.gclk_site, "no free HR pad for the global clock"
             ports.append("input gclk_pad")
         print("module top({});".format(", ".join(ports)))
         print("    (* KEEP, DONT_TOUCH *) LUT6 dummy ();")
         if self.need_gclk:
-            print("    wire gclk;")
-            print("    (* KEEP, DONT_TOUCH *) BUFG bufg_gclk (.I(gclk_pad), .O(gclk));")
+            print("    wire gclk, gclk_ibuf;")
+            print(
+                '    (* KEEP, DONT_TOUCH, LOC="{}" *) IBUF #(.IOSTANDARD("{}")) '
+                'ibuf_gclk (.I(gclk_pad), .O(gclk_ibuf));'.format(
+                    self.gclk_site, IOSTANDARD))
+            print("    (* KEEP, DONT_TOUCH *) BUFG bufg_gclk (.I(gclk_ibuf), .O(gclk));")
         for b in self.blocks:
             print(b)
         print("endmodule")
@@ -310,7 +338,7 @@ def main():
         sys.stderr.write("no HCLK_CMT tiles with BUFMRCE sites\n")
         sys.exit(1)
 
-    d = Design(grid)
+    d = Design(grid, gclk_site(bonded_sites(), cmts))
     for cmt in cmts:
         tn = cmt["tile"]
         for rel in (0, 1):
@@ -319,8 +347,7 @@ def main():
             pad_site = cmt["pads"].get(SITE_CCIO[rel])
             rec = {"tile": tn, "rel": rel, "site": site, "cell_name": None}
 
-            if MODE in ("cal_s0", "cal_s1", "neg_unconsumed", "neg_const_ce",
-                        "probe_above"):
+            if MODE in ("cal_s0", "cal_s1", "neg_const_ce", "probe_above"):
                 want = 1 if MODE == "cal_s1" else 0
                 state = "bufmr" if rel == want and pad_site else "unused"
                 cell = {"cell": "BUFMR", "ce": "none"}
@@ -336,7 +363,7 @@ def main():
                 state = choose_state()
                 cell = choose_cell()
                 source = choose_source()
-                dest = "below" if random.random() < 0.3 else "own"
+                dest = random.choice(("own", "own", "below", "above"))
                 if state == "direct" and not pad_site:
                     state = "unused"
                 if source == "pad" and not pad_site:
@@ -347,12 +374,35 @@ def main():
                 d.params.append(rec)
                 continue
 
+            if state == "direct" and not d.has_free_bufr(cmt):
+                rec["state"] = "unused"
+                rec["skipped"] = "no free BUFR"
+                d.params.append(rec)
+                continue
             if state == "direct":
                 src = d.pad(pad_site, "pad_" + name)
                 got = d.bufr(cmt, src, "direct_" + name)
                 rec.update({"source": "pad", "pad": pad_site, "bufr": got})
                 d.params.append(rec)
                 continue
+
+            target = cmt
+            if dest == "below":
+                target = neighbour(cmts, cmt, -1)
+            elif dest == "above":
+                target = neighbour(cmts, cmt, +1)
+            if target is None and MODE == "campaign":
+                # The bottom or top row of CMTs: use the own region.
+                target = cmt
+            if target is not None and not d.has_free_bufr(target):
+                # A BUFMR must drive something (DRC REQP-1936).
+                target = None
+            if target is None:
+                rec["state"] = "unused"
+                rec["skipped"] = "no region {} with a free BUFR".format(dest)
+                d.params.append(rec)
+                continue
+            dest = "own" if target is cmt else dest
 
             if source == "pad":
                 src = d.pad(pad_site, "pad_" + name)
@@ -367,21 +417,8 @@ def main():
             if cell["cell"] == "BUFMRCE" and cell["ce"] == "fabric":
                 ce_sig = d.toggle(cmt["region"].name, "ce_" + name)
 
-            target = cmt
-            if dest == "below":
-                target = neighbour(cmts, cmt, -1) or cmt
-            elif dest == "above":
-                target = neighbour(cmts, cmt, +1)
-            if target is None:
-                rec["state"] = "unused"
-                rec["skipped"] = "no region above"
-                d.params.append(rec)
-                continue
-            dest = "own" if target is cmt else dest
-
-            consumed = MODE != "neg_unconsumed"
-            d.bufmr(site, cell, src, ce_sig, name, consumed)
-            got = d.bufr(target, name + "_o", "r_" + name) if consumed else None
+            d.bufmr(site, cell, src, ce_sig, name)
+            got = d.bufr(target, name + "_o", "r_" + name)
             rec.update(cell)
             rec.update({
                 "cell_name": "bufmr_" + name,

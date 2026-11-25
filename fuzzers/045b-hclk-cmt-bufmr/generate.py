@@ -22,13 +22,18 @@
 #       specimens (which have no MMCM) say the MMCM positions are off.
 #   BUFMRCE.BUFMRCE_X0Y<n>.IN_USE
 #       1 when a BUFMR cell is on that site and its output is routed, 0
-#       when no cell is on it. A cell that is placed but drives nothing
-#       (neg_unconsumed) gets no IN_USE tag; README.md says why.
-#   BUFMRCE.BUFMRCE_X0Y<n>.ZINV_CE / .CE_TYPE.ASYNC / .INIT_OUT
-#       only for a BUFMRCE whose CE is driven from the fabric, and 0 on an
-#       unused site. With a constant CE Vivado folds the CE away (a BUFMR
-#       and a BUFMRCE with CE tied active give identical bitstreams), so
-#       those cells get none of these tags.
+#       when no cell is on it. (A BUFMR whose output drives nothing fails
+#       DRC REQP-1936, so there is no placed-but-unused case.)
+#   BUFMRCE.BUFMRCE_X0Y<n>.CE_TYPE.ASYNC / .INIT_OUT
+#       for every used cell: a BUFMR has the defaults, SYNC and 0. These
+#       are kept with a constant CE: neg_const_ce (CE constant, ASYNC,
+#       INIT_OUT=1) sets two bits cal_s0's BUFMRs don't.
+#   BUFMRCE.BUFMRCE_X0Y<n>.ZINV_CE
+#       only for a BUFMRCE whose CE is driven from the fabric. With a
+#       constant CE, Vivado folds an inversion into the constant: a
+#       BUFMRCE with CE=0 and IS_CE_INVERTED=1 sets the same bit as a
+#       BUFMR.
+#   All four are 0 on an unused site.
 import json
 import os
 import re
@@ -141,15 +146,17 @@ def main():
                 continue
             segmk.add_tile_tag(tile_name, prefix + ".IN_USE", 1)
             counts["in_use"] += 1
-            if cell["ref"] == "BUFMRCE" and cell["ce_driver"] == "FDRE":
+            is_bufmrce = cell["ref"] == "BUFMRCE"
+            segmk.add_tile_tag(
+                tile_name, prefix + ".CE_TYPE.ASYNC",
+                1 if is_bufmrce and cell["CE_TYPE"] == "ASYNC" else 0)
+            segmk.add_tile_tag(
+                tile_name, prefix + ".INIT_OUT",
+                bit_of(cell["INIT_OUT"]) if is_bufmrce else 0)
+            if is_bufmrce and cell["ce_driver"] == "FDRE":
                 segmk.add_tile_tag(
                     tile_name, prefix + ".ZINV_CE",
                     1 - bit_of(cell["IS_CE_INVERTED"]))
-                segmk.add_tile_tag(
-                    tile_name, prefix + ".CE_TYPE.ASYNC",
-                    1 if cell["CE_TYPE"] == "ASYNC" else 0)
-                segmk.add_tile_tag(
-                    tile_name, prefix + ".INIT_OUT", bit_of(cell["INIT_OUT"]))
                 counts["ce_tags"] += 1
 
     print(
