@@ -63,6 +63,27 @@ class Configuration {
 	    const PacketData& packet_data,
 	    absl::optional<typename ArchType::Part>& part);
 
+	// Adds the packets that tell the device how to read the rest of the
+	// bitstream from SPI flash: the bus width (1, 2 or 4) and whether
+	// the flash takes 32-bit addresses. This matches what Vivado writes
+	// for BITSTREAM.CONFIG.SPI_BUSWIDTH and
+	// BITSTREAM.CONFIG.SPI_32BIT_ADDR: a write of the BSPI register and a
+	// BSPI_READ command right after the first packet. Call it after
+	// createConfigurationPackage. Only Series-7 has it.
+	static void addSpiReadOptions(
+	    typename ArchType::ConfigurationPackage& out_packets,
+	    int bus_width,
+	    bool address_32bit);
+
+	// Sets the master configuration clock rate in the COR0 write that
+	// createConfigurationPackage adds, like Vivado's
+	// BITSTREAM.CONFIG.CONFIGRATE. mhz must be one of the nominal rates
+	// Vivado accepts: 3, 6, 9, 12, 16, 22, 26, 33, 40, 50 or 66. Only
+	// Series-7 has it.
+	static void setConfigRate(
+	    typename ArchType::ConfigurationPackage& out_packets,
+	    int mhz);
+
 	// Returns the payload for a type 2 packet
 	// which allows for bigger payload compared to type 1.
 	static PacketData createType2ConfigurationPacketData(
@@ -117,6 +138,17 @@ void Configuration<Series7>::createConfigurationPackage(
     Series7::ConfigurationPackage& out_packets,
     const PacketData& packet_data,
     absl::optional<Series7::Part>& part);
+
+template <>
+void Configuration<Series7>::addSpiReadOptions(
+    Series7::ConfigurationPackage& out_packets,
+    int bus_width,
+    bool address_32bit);
+
+template <>
+void Configuration<Series7>::setConfigRate(
+    Series7::ConfigurationPackage& out_packets,
+    int mhz);
 
 template <>
 void Configuration<UltraScale>::createConfigurationPackage(
