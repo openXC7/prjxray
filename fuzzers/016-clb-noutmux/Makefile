@@ -6,7 +6,9 @@
 #
 # SPDX-License-Identifier: ISC
 # Specimen count
-N := 5
+# top.py fixes random.seed(0), so every specimen is the same design and
+# more than one adds nothing (#113).
+N := 1
 
 # A grep regex for SLICEM features to be skipped for SLICELs
 SLICEM_FEATURES ?= "DOUTMUX.MC31"
