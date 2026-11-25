@@ -6,9 +6,10 @@
 #
 # SPDX-License-Identifier: ISC
 # Specimen count
-# top.py fixes random.seed(0), so every specimen is the same design and
-# more than one adds nothing (#113).
-N := 1
+# top.py fixes random.seed(0), so every specimen is the same design
+# (#113). Two are still needed: segmatch runs with -m 2, and with one
+# specimen the tags set in it once fall below that and the rows change.
+N := 2
 
 # A grep regex for SLICEM features to be skipped for SLICELs
 SLICEM_FEATURES ?= "DFFMUX.MC31"
