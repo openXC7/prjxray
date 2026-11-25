@@ -28,6 +28,13 @@
 #                       IS_CE_INVERTED=1, CE_TYPE=ASYNC and INIT_OUT=1
 #   probe_above         cal_s0's shape, but each BUFMR drives a BUFR in the
 #                       region above
+#   onehot_perf         one BUFMR per HCLK_CMT tile, pad-fed on site 0, driving
+#                       one BUFR in its own region, with its route fixed
+#                       through one HCLK_CMT_PHASERIN_RCLK<n> ->
+#                       HCLK_CMT_MUX_PHSR_PERFCLK<m> pair (see onehot_pair()).
+#                       Unforced, Vivado always fills the mux in the same
+#                       order, so its pips only ever appear together and
+#                       their shared bits can't be told apart.
 #
 # A BUFMR whose O drives nothing cannot be built: Vivado's DRC REQP-1936
 # only lets BUFMR/O drive BUFR/I, BUFIO/I and the PHASER reference clocks.
@@ -329,7 +336,73 @@ def neighbour(cmts, cmt, dy):
     return None
 
 
+# The 16 PHASER_IN -> performance-clock positions of a HCLK_CMT tile.
+PERF_PAIRS = [(n, m) for m in range(4) for n in range(4)]
+
+
+def specimen_index():
+    """The number at the end of the specimen directory, e.g. specimen_P_007."""
+    tail = os.path.basename(os.getcwd()).rsplit("_", 1)[-1]
+    return int(tail) if tail.isdigit() else 0
+
+
+def onehot_pair(spec, rank):
+    """The (RCLK n, PERFCLK m) pair of tile `rank` in specimen `spec`.
+
+    Tiles of one specimen get different pairs, and successive specimens
+    shift every tile on by one, so each tile walks all 16 pairs.
+    """
+    return PERF_PAIRS[(spec + rank) % len(PERF_PAIRS)]
+
+
+def main_onehot():
+    db = Database(util.get_db_root(), util.get_part())
+    grid = db.grid()
+    cmts = list(gen_cmts(db, grid))
+    d = Design(grid, None)
+    spec = specimen_index()
+    forced = []
+    for rank, cmt in enumerate(cmts):
+        site = cmt["sites"][0]
+        name = site.replace("/", "_")
+        pad_site = cmt["pads"].get(SITE_CCIO[0])
+        rec = {"tile": cmt["tile"], "rel": 0, "site": site, "cell_name": None}
+        if not pad_site or not d.has_free_bufr(cmt):
+            rec["state"] = "unused"
+            d.params.append(rec)
+            continue
+        n, m = onehot_pair(spec, rank)
+        src = d.pad(pad_site, "pad_" + name)
+        cell = {"cell": "BUFMR", "ce": "none"}
+        d.bufmr(site, cell, src, None, name)
+        bufr = d.bufr(cmt, name + "_o", "r_" + name)
+        forced.append(
+            "{} {} {} {} {}".format(name + "_o", cmt["tile"], n, m, bufr))
+        rec.update(cell)
+        rec.update({
+            "state": "bufmr",
+            "cell_name": "bufmr_" + name,
+            "source": "pad",
+            "pad": pad_site,
+            "dest": "own",
+            "dest_tile": cmt["tile"],
+            "bufr": bufr,
+            "forced_rclk": n,
+            "forced_perfclk": m,
+        })
+        d.params.append(rec)
+    d.emit()
+    with open("forced.txt", "w") as f:
+        for line in forced:
+            f.write(line + "\n")
+    sys.stderr.write("MODE={} specimen={} cmts={} forced={}\n".format(
+        MODE, spec, len(cmts), len(forced)))
+
+
 def main():
+    if MODE == "onehot_perf":
+        main_onehot()
+        return
     seed_rng()
     db = Database(util.get_db_root(), util.get_part())
     grid = db.grid()

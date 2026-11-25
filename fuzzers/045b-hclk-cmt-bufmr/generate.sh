@@ -30,6 +30,7 @@ case "$(basename "$SPECDIR")" in
     specimen_neg_unused) export FUZZ_MODE=neg_unused ;;
     specimen_neg_const_ce) export FUZZ_MODE=neg_const_ce ;;
     specimen_probe_above) export FUZZ_MODE=probe_above ;;
+    specimen_P_*) export FUZZ_MODE=onehot_perf ;;
     *) export FUZZ_MODE="${FUZZ_MODE:-campaign}" ;;
 esac
 

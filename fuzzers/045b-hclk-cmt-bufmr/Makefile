@@ -21,9 +21,16 @@ FIXED := \
 SPECIMENS := $(RAND) $(FIXED)
 SPECIMENS_OK := $(addsuffix /OK,$(SPECIMENS))
 
+# One-hot PHASER_IN -> performance-clock population: ONEHOT_N specimens in
+# which every HCLK_CMT tile has one BUFMR whose route is fixed through one
+# of the 16 (PHASERIN_RCLKn, PHSR_PERFCLKm) pairs.  `make database-onehot`
+# builds the default population plus these.
+ONEHOT_N ?= 32
+ONEHOT := $(addprefix build/specimen_P_,$(shell seq -f '%03.0f' $(ONEHOT_N)))
+
 all: database
 
-$(SPECIMENS_OK):
+$(SPECIMENS_OK) $(addsuffix /OK,$(ONEHOT)):
 	mkdir -p build
 	+bash $(FUZDIR)/generate.sh $(subst /OK,,$@)
 
@@ -34,6 +41,9 @@ SEGMATCH = ${XRAY_SEGMATCH} -c 2
 TILES := hclk_cmt hclk_cmt_l
 
 database: $(addprefix build/segbits_,$(addsuffix .db,$(TILES)))
+
+database-onehot:
+	$(MAKE) database SPECIMENS="$(SPECIMENS) $(ONEHOT)"
 
 build/segbits_hclk_cmt.rdb: $(SPECIMENS_OK)
 	$(SEGMATCH) -o $@ $(addsuffix /segdata_hclk_cmt.txt,$(SPECIMENS))
@@ -70,4 +80,4 @@ run:
 clean:
 	rm -rf build run.ok
 
-.PHONY: all database gate pushdb run clean
+.PHONY: all database database-onehot gate pushdb run clean

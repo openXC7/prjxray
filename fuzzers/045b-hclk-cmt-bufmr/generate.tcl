@@ -47,6 +47,65 @@ proc dump_hclk_cmt_pips {filename} {
     close $fp
 }
 
+# FUZZ_MODE=onehot_perf: top.py lists, per line,
+#   <net> <HCLK_CMT tile> <RCLK n> <PERFCLK m> <BUFR site>
+# and the net's route is fixed before route_design through that tile's
+# HCLK_CMT_PHASERIN_RCLK<n> and HCLK_CMT_MUX_PHSR_PERFCLK<m> wires:
+# BUFMRCE/O -> RCLK<n> -> PERFCLK<m> -> BUFR/I. A pair Vivado finds no path
+# for is logged and left to the router, not an error: which pairs exist is
+# part of what the specimens measure.
+proc force_phsr_routes {filename} {
+    if {![file exists $filename]} {
+        return
+    }
+    set fp [open $filename r]
+    set log [open forced_routes.txt w]
+    while {[gets $fp line] >= 0} {
+        if {[string trim $line] eq ""} { continue }
+        lassign $line netname tile n m bufr
+        set net [get_nets $netname]
+        set n0 [get_nodes -of_objects [get_site_pins -filter {DIRECTION == OUT} -of_objects $net]]
+        set n1 [get_nodes -of_objects [get_wires "$tile/HCLK_CMT_PHASERIN_RCLK$n"]]
+        set n2 [get_nodes -of_objects [get_wires "$tile/HCLK_CMT_MUX_PHSR_PERFCLK$m"]]
+        set n3 [get_nodes -of_objects [get_site_pins "$bufr/I"]]
+        set r1 [find_routing_path -quiet -from $n0 -to $n1]
+        set r2 [find_routing_path -quiet -from $n1 -to $n2]
+        set r3 [find_routing_path -quiet -from $n2 -to $n3]
+        if {$r1 eq "" || $r2 eq "" || $r3 eq ""} {
+            puts $log "$netname $tile RCLK$n PERFCLK$m $bufr no_path r1=[llength $r1] r2=[llength $r2] r3=[llength $r3]"
+            continue
+        }
+        set route [concat $r1 [lrange $r2 1 end] [lrange $r3 1 end]]
+        set_property FIXED_ROUTE $route $net
+        puts $log "$netname $tile RCLK$n PERFCLK$m $bufr fixed $route"
+    }
+    close $fp
+    close $log
+}
+
+# What Vivado routed for each forced net: its PHASERIN -> PHSR_PERFCLK pips.
+proc check_forced_routes {filename} {
+    if {![file exists forced.txt]} {
+        return
+    }
+    set fp [open forced.txt r]
+    set out [open $filename w]
+    while {[gets $fp line] >= 0} {
+        if {[string trim $line] eq ""} { continue }
+        lassign $line netname tile n m bufr
+        set net [get_nets $netname]
+        set hit {}
+        foreach pip [get_pips -quiet -of_objects $net] {
+            if {[regexp {HCLK_CMT_PHASERIN_RCLK[0-9]->>HCLK_CMT_MUX_PHSR_PERFCLK[0-9]$} $pip]} {
+                lappend hit $pip
+            }
+        }
+        puts $out "$netname want=RCLK$n->PERFCLK$m status=[get_property ROUTE_STATUS $net] got=$hit"
+    }
+    close $fp
+    close $out
+}
+
 proc run {} {
     create_project -force -part $::env(XRAY_PART) design design
     read_verilog top.v
@@ -60,7 +119,9 @@ proc run {} {
     set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets]
 
     place_design
+    force_phsr_routes forced.txt
     route_design
+    check_forced_routes forced_check.txt
 
     dump_bufmrs bufmr_sites.txt
     dump_hclk_cmt_pips design_pips.txt
