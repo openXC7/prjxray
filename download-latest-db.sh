@@ -8,7 +8,7 @@
 # SPDX-License-Identifier: ISC
 
 GITHUB_PROTO=${1:-https}
-GITHUB_URL=$GITHUB_PROTO://github.com/SymbiFlow/prjxray-db.git
+GITHUB_URL=$GITHUB_PROTO://github.com/openXC7/prjxray-db.git
 rm -rf database
 git clone $GITHUB_URL database
 # Update files in the database from our version so fuzzers run correctly.

@@ -243,13 +243,12 @@ Third party contains code not developed as part of Project X-Ray.
 Running the all fuzzers in order will produce a database which documents the
 bitstream format in the [database](database) directory.
 
-As running all these fuzzers can take significant time,
-[Tim 'mithro' Ansell <me@mith.ro>](https://github.com/mithro) has graciously
-agreed to maintain a copy of the database in the
-[prjxray-db](https://github.com/f4pga/prjxray-db) repository.
-
-Please direct enquires to [Tim](mailto:me@mith.ro) if there are any issues with
-it.
+As running all these fuzzers can take significant time, a copy of the
+database is kept in the
+[openXC7/prjxray-db](https://github.com/openXC7/prjxray-db) repository;
+`./download-latest-db.sh` clones it into [database](database). The original
+database, which openXC7/prjxray-db started from, is
+[f4pga/prjxray-db](https://github.com/f4pga/prjxray-db).
 
 # Current Focus
 
