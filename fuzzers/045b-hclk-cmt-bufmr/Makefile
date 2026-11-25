@@ -56,18 +56,20 @@ build/segbits_hclk_cmt_l.rdb: $(SPECIMENS_OK)
 build/segbits_%.db: build/segbits_%.rdb
 	python3 $(FUZDIR)/../039a-hclk-bufrclk-perfclk/filter_rdb.py \
 		$< build/segbits_$*.filtered.db build/ppips_$*.db build/$*.notes.txt
-	python3 $(FUZDIR)/onehot_rows.py build $* \
+	python3 $(FUZDIR)/onehot_rows.py $* \
 		build/segbits_$*.filtered.db $@ build/$*.notes.txt \
-		${XRAY_DATABASE_DIR}/${XRAY_DATABASE}/segbits_$*.db
+		${XRAY_DATABASE_DIR}/${XRAY_DATABASE}/segbits_$*.db $(SPECIMENS)
 
 # The calibration gate: Vivado 2025.2 sets HCLK_CMT_L 28_187 for a used
 # BUFMRCE site 0 on xc7a100t and xc7a35t.  If IN_USE of site 0 does not
 # come back with that bit, the campaign resolved something else and
 # nothing is merged.  segmaker names both tile types HCLK_CMT; mergedb
 # renames the _l rows to HCLK_CMT_L when they are merged.
-gate: build/segbits_hclk_cmt_l.db
+gate: build/segbits_hclk_cmt_l.db build/segbits_hclk_cmt.db
 	grep -E '^HCLK_CMT\.BUFMRCE\.BUFMRCE_X0Y0\.IN_USE( [^ ]+)* 28_187( |$$)' $<
 	grep -E '^HCLK_CMT\.HCLK_CMT_MUX_PHSR_PERFCLK0\.HCLK_CMT_PHASERIN_RCLK2 26_178 27_179 29_131$$' $<
+	test "$$(grep -cE '^HCLK_CMT\.HCLK_CMT_MUX_PHSR_PERFCLK[0-3]\.HCLK_CMT_PHASERIN_RCLK[0-3] ' $<)" -eq 16
+	test "$$(grep -cE '^HCLK_CMT\.HCLK_CMT_MUX_PHSR_PERFCLK[0-3]\.HCLK_CMT_PHASERIN_RCLK[0-3] ' build/segbits_hclk_cmt.db)" -eq 16
 
 # Only rows that carry bits are merged, and no maskmerge: this population
 # is far too narrow to rewrite the masks 045 built.

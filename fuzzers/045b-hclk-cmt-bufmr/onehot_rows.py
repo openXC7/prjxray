@@ -17,37 +17,44 @@ inputs of the same mux use too. So segmatch gives them one bit, or none
 (<0 candidates> for all four RCLK2 positions).
 
 The onehot_perf specimens (specimen_P_*) have exactly one of these pips per
-HCLK_CMT tile, with the route fixed by generate.tcl. A pip's row is then
-the bits set in every one-hot tile that has it, minus:
+HCLK_CMT tile, with the route fixed by generate.tcl. A pip's row is the
+bits set in every tile, of any specimen, that has the pip, minus the bits
+set in every one-hot tile (the BUFMRCE site and its pad, which all of them
+share).
 
-- the bits set in every one-hot tile (the BUFMRCE site and its pad, which
-  all of them share);
-- the bits of rows the seed database already has for this tile type,
-  other than the HCLK_CMT_MUX_PHSR_PERFCLK rows, whose code bits these
-  pips do share. A correlation with an existing row is not a new row: with
-  four one-hot tiles per pip in HCLK_CMT_L, a BUFR's
-  HCLK_CMT_CK_BUFRCLK<n>_USED bit can be set in all four by chance.
+Nothing is written, and the script fails, unless:
 
-The rows are only written if they explain every specimen of the run: in
-each HCLK_CMT tile of each specimen, the union of the rows of the pips
-routed there must equal the bits of those rows that are set. If one tile
-disagrees, nothing is written and the script fails.
+- all 16 pips have a row, each from at least MIN_ONEHOT one-hot tiles that
+  have it and no other of the 16;
+- no row has a bit of a seed-database row outside this mux (a correlation
+  with an existing row is not a new row: if one is left after the
+  intersection, the population can't tell them apart);
+- every bit common to all one-hot tiles belongs to a row, of the seed
+  database or of SEGBITS_IN, so no PHASER_IN bit is lost in the
+  subtraction;
+- the rows explain every tile of every specimen: in each HCLK_CMT tile,
+  the union of the rows of the pips routed there equals the bits of those
+  rows that are set.
 
-Usage: onehot_rows.py BUILD_DIR FAMILY SEGBITS_IN SEGBITS_OUT NOTES SEED_DB
+Usage:
+  onehot_rows.py FAMILY SEGBITS_IN SEGBITS_OUT NOTES SEED_DB SPECIMEN_DIR...
 
-SEED_DB is the database's segbits file for FAMILY.
-
-SEGBITS_IN is filter_rdb.py's output for FAMILY (hclk_cmt or hclk_cmt_l).
-Its PHASERIN rows are replaced, its other rows are copied unchanged, and
-what was done is appended to NOTES.
+FAMILY is hclk_cmt or hclk_cmt_l. SEGBITS_IN is filter_rdb.py's output for
+it: its PHASERIN rows are replaced and its other rows copied unchanged.
+SEED_DB is the database's segbits file for FAMILY. The specimen
+directories are the ones segmatch was given. What was done is appended to
+NOTES.
 """
-import glob
 import os
 import re
 import sys
 
 TAG_RE = re.compile(
     r"^HCLK_CMT\.HCLK_CMT_MUX_PHSR_PERFCLK[0-9]\.HCLK_CMT_PHASERIN_RCLK[0-9]$")
+EXPECTED = [
+    "HCLK_CMT.HCLK_CMT_MUX_PHSR_PERFCLK{}.HCLK_CMT_PHASERIN_RCLK{}".format(m, n)
+    for m in range(4) for n in range(4)
+]
 
 # A pip needs this many one-hot tiles before its row is trusted.
 MIN_ONEHOT = 4
@@ -71,42 +78,41 @@ def load_segdata(path):
     return segs
 
 
-def seed_row_bits(fn):
-    """Bits of the seed database's rows, except the PHSR_PERFCLK mux's."""
+def row_bits(lines, skip_phsr):
+    """Bits of segbits lines, optionally without the PHSR_PERFCLK mux's."""
     bits = set()
-    if not os.path.exists(fn):
-        return bits
-    with open(fn) as f:
-        for line in f:
-            w = line.split()
-            if len(w) < 2 or ".HCLK_CMT_MUX_PHSR_PERFCLK" in w[0]:
-                continue
-            bits |= {b.lstrip("!") for b in w[1:]}
+    for line in lines:
+        w = line.split()
+        if len(w) < 2 or (skip_phsr and ".HCLK_CMT_MUX_PHSR_PERFCLK" in w[0]):
+            continue
+        bits |= {b.lstrip("!") for b in w[1:]}
     return bits
 
 
+def fail(errors, family):
+    for e in errors:
+        print("{}: {}".format(family, e), file=sys.stderr)
+    print("{}: nothing written".format(family), file=sys.stderr)
+    sys.exit(1)
+
+
 def main():
-    build, family, fn_in, fn_out, fn_notes, fn_seed = sys.argv[1:7]
+    if len(sys.argv) < 7:
+        print(__doc__, file=sys.stderr)
+        sys.exit(2)
+    family, fn_in, fn_out, fn_notes, fn_seed = sys.argv[1:6]
+    specimens = sys.argv[6:]
     notes = []
-    known = seed_row_bits(fn_seed)
 
-    specimens = sorted(
-        d for d in glob.glob(os.path.join(build, "specimen_*"))
-        if os.path.isdir(d))
-    onehot = [d for d in specimens if os.path.basename(d).startswith(
-        "specimen_P_")]
     segfile = "segdata_{}.txt".format(family)
-
-    all_segs = []
+    all_segs, onehot_segs = [], []
     for d in specimens:
-        fn = os.path.join(d, segfile)
-        if os.path.exists(fn):
-            all_segs.extend(load_segdata(fn))
-    onehot_segs = []
-    for d in onehot:
-        fn = os.path.join(d, segfile)
-        if os.path.exists(fn):
-            onehot_segs.extend(load_segdata(fn))
+        segs = load_segdata(os.path.join(d, segfile))
+        all_segs.extend(segs)
+        if os.path.basename(os.path.normpath(d)).startswith("specimen_P_"):
+            onehot_segs.extend(segs)
+    if not onehot_segs:
+        fail(["no onehot_perf (specimen_P_*) specimens"], family)
 
     with open(fn_in) as f:
         lines = [l.rstrip("\n") for l in f if l.strip()]
@@ -115,68 +121,66 @@ def main():
         if TAG_RE.match(l.split()[0]):
             notes.append("replace segmatch row: " + l)
 
-    rows = {}
-    if not onehot_segs:
-        notes.append(
-            "no onehot_perf specimens: no PHASERIN rows written (segmatch "
-            "cannot give their shared bits)")
-    else:
-        common = set.intersection(*[s["bits"] for s in onehot_segs])
-        tags = sorted({t for s in onehot_segs for t in s["tags"]
-                       if TAG_RE.match(t)})
-        for t in tags:
-            on = [s for s in onehot_segs if s["tags"].get(t) == 1]
-            if len(on) < MIN_ONEHOT:
-                notes.append(
-                    "drop, only {} one-hot tiles: {}".format(len(on), t))
-                continue
-            # A one-hot tile has this pip and no other of the family.
-            others = [
-                s for s in on if sum(
-                    v for k, v in s["tags"].items() if TAG_RE.match(k)) != 1
-            ]
-            if others:
-                notes.append(
-                    "drop, {} one-hot tiles have more than one of these "
-                    "pips: {}".format(len(others), t))
-                continue
-            bits = set.intersection(*[s["bits"] for s in on]) - common
-            if bits & known:
-                notes.append(
-                    "strip {} from {}: they belong to rows of the seed "
-                    "database".format(" ".join(sorted(bits & known)), t))
-                bits -= known
-            if not bits:
-                notes.append("drop, no bits: " + t)
-                continue
-            rows[t] = bits
+    seed_lines = []
+    if os.path.exists(fn_seed):
+        with open(fn_seed) as f:
+            seed_lines = [l for l in f if l.strip()]
+    seed_other = row_bits(seed_lines, skip_phsr=True)
+    explained = row_bits(seed_lines, skip_phsr=False) | row_bits(kept, False)
 
-        group = set().union(*rows.values()) if rows else set()
-        mismatches = []
-        for i, s in enumerate(all_segs):
-            routed = [t for t, v in s["tags"].items() if v and TAG_RE.match(t)]
-            if any(t not in rows for t in routed):
-                # A pip without a row: this tile can't be checked.
-                continue
-            want = set().union(*[rows[t] for t in routed]) if routed else set()
-            got = s["bits"] & group
-            if want != got:
-                mismatches.append(
-                    "segment {}: pips {} predict {} but has {}".format(
-                        i, routed, sorted(want), sorted(got)))
-        if mismatches:
-            for m in mismatches:
-                print(m, file=sys.stderr)
-            print(
-                "{}: {} of {} segments disagree with the one-hot rows; "
-                "nothing written".format(
-                    family, len(mismatches), len(all_segs)),
-                file=sys.stderr)
-            sys.exit(1)
+    errors = []
+    common = set.intersection(*[s["bits"] for s in onehot_segs])
+    unexplained = sorted(common - explained)
+    if unexplained:
+        errors.append(
+            "bits common to every one-hot tile belong to no row: {}".format(
+                " ".join(unexplained)))
+
+    def routed(s):
+        return [t for t, v in s["tags"].items() if v and TAG_RE.match(t)]
+
+    rows = {}
+    for t in EXPECTED:
+        on_onehot = [s for s in onehot_segs if s["tags"].get(t) == 1]
+        alone = [s for s in on_onehot if routed(s) == [t]]
+        if len(alone) < MIN_ONEHOT:
+            errors.append(
+                "{} one-hot tiles have only {}, need {}".format(
+                    len(alone), t, MIN_ONEHOT))
+            continue
+        on_all = [s for s in all_segs if s["tags"].get(t) == 1]
+        bits = set.intersection(*[s["bits"] for s in on_all]) - common
+        if not bits:
+            errors.append("no bits: " + t)
+            continue
+        clash = bits & seed_other
+        if clash:
+            errors.append(
+                "{} keeps {}, bits of rows the seed database already has".
+                format(t, " ".join(sorted(clash))))
+            continue
+        rows[t] = bits
         notes.append(
-            "one-hot rows: {} pips from {} one-hot segments, checked "
-            "against all {} segments".format(
-                len(rows), len(onehot_segs), len(all_segs)))
+            "one-hot row from {} one-hot and {} other tiles: {} {}".format(
+                len(alone),
+                len(on_all) - len(on_onehot), t, " ".join(sorted(bits))))
+    if errors:
+        fail(errors, family)
+
+    group = set().union(*rows.values())
+    for i, s in enumerate(all_segs):
+        r = routed(s)
+        want = set().union(*[rows[t] for t in r]) if r else set()
+        got = s["bits"] & group
+        if want != got:
+            errors.append(
+                "segment {}: pips {} predict {} but has {}".format(
+                    i, r, sorted(want), sorted(got)))
+    if errors:
+        fail(errors, family)
+    notes.append(
+        "one-hot rows: all {} pips, checked against all {} segments".format(
+            len(rows), len(all_segs)))
 
     out = kept + [
         "{} {}".format(t, " ".join(sorted(b))) for t, b in sorted(rows.items())

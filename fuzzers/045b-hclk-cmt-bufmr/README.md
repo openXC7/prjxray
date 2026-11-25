@@ -117,15 +117,20 @@ RCLK1 rather than to this mux. A fuzzer for the CMT_TOP PHASER_IN tiles
 would settle that.
 
 `onehot_rows.py` writes these rows in place of segmatch's. A pip's row is
-the bits set in every one-hot tile that has it, minus the bits common to
-all one-hot tiles, and minus the bits of the seed database's other rows
-for the tile type: a correlation with an existing row is not a new row. It
-then checks the rows against every specimen of the run. In each HCLK_CMT
-tile, the union of the rows of the pips routed there must be exactly the
-bits of these rows that are set. If any tile disagrees, it writes nothing
-and fails. On xc7a100t, the rows explain all 522 tiles of 87 specimens,
-330 of which (the randomised and fixed specimens) played no part in
-deriving them.
+the bits set in every tile, of any specimen, that has it, minus the bits
+common to all one-hot tiles (the BUFMRCE site and its pad). It writes
+nothing, and fails, unless:
+
+- all 16 pips have a row, each from at least four one-hot tiles that have
+  that pip and no other of the 16;
+- no row keeps a bit of a seed-database row outside this mux;
+- every bit common to all one-hot tiles belongs to some row, so nothing
+  of the PHASER_IN path is lost in the subtraction;
+- in each HCLK_CMT tile of each specimen, the union of the rows of the
+  pips routed there is exactly the bits of these rows that are set.
+
+On xc7a100t the rows explain all 522 tiles of 87 specimens, 330 of which
+(the randomised and fixed specimens) played no part in deriving them.
 
 ## Thresholds and publishing
 
@@ -148,6 +153,7 @@ in `HCLK_CMT_L` on xc7a100t:
 with `28_187`, the bit Vivado sets for a used site 0, and
 `HCLK_CMT_MUX_PHSR_PERFCLK0.HCLK_CMT_PHASERIN_RCLK2` with exactly
 `26_178 27_179 29_131`, the bits this pip set in the measurements for
-openXC7/nextpnr#15 and in `cal_s0`. `make pushdb` runs
+openXC7/nextpnr#15 and in `cal_s0`. It also checks that both files have all 16
+PHASERIN rows. `make pushdb` runs
 the gate, then merges only the rows that carry bits; it runs no
 `maskmerge`.
