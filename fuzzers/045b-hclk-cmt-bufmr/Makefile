@@ -52,10 +52,16 @@ build/segbits_hclk_cmt_l.rdb: $(SPECIMENS_OK)
 	$(SEGMATCH) -o $@ $(addsuffix /segdata_hclk_cmt_l.txt,$(SPECIMENS))
 
 # 039a's filter: rows with bits, nothing for <const0> / <0 candidates> /
-# unresolved tags, and a notes file for everything refused.
+# unresolved tags, and a notes file for everything refused.  Then
+# onehot_rows.py replaces the PHASERIN -> PHSR_PERFCLK rows, whose bits are
+# all shared with other pips, with the ones the onehot_perf specimens give,
+# and fails if any specimen disagrees with them.
 build/segbits_%.db: build/segbits_%.rdb
 	python3 $(FUZDIR)/../039a-hclk-bufrclk-perfclk/filter_rdb.py \
-		$< $@ build/ppips_$*.db build/$*.notes.txt
+		$< build/segbits_$*.filtered.db build/ppips_$*.db build/$*.notes.txt
+	python3 $(FUZDIR)/onehot_rows.py build $* \
+		build/segbits_$*.filtered.db $@ build/$*.notes.txt \
+		${XRAY_DATABASE_DIR}/${XRAY_DATABASE}/segbits_$*.db
 
 # The calibration gate: Vivado 2025.2 sets HCLK_CMT_L 28_187 for a used
 # BUFMRCE site 0 on xc7a100t and xc7a35t.  If IN_USE of site 0 does not
@@ -64,6 +70,7 @@ build/segbits_%.db: build/segbits_%.rdb
 # renames the _l rows to HCLK_CMT_L when they are merged.
 gate: build/segbits_hclk_cmt_l.db
 	grep -E '^HCLK_CMT\.BUFMRCE\.BUFMRCE_X0Y0\.IN_USE( [^ ]+)* 28_187( |$$)' $<
+	grep -E '^HCLK_CMT\.HCLK_CMT_MUX_PHSR_PERFCLK0\.HCLK_CMT_PHASERIN_RCLK2 26_178 27_179 29_131$$' $<
 
 # Only rows that carry bits are merged, and no maskmerge: this population
 # is far too narrow to rewrite the masks 045 built.

@@ -68,6 +68,17 @@ must drive something.
 Every BUFR clocks two flops in its region. Only HR banks (`HCLK_IOI3`) are
 used for now.
 
+A third population, `make database-onehot` (`ONEHOT_N` specimens,
+`specimen_P_*`, default 32), has one pad-fed BUFMR per HCLK_CMT tile whose
+route generate.tcl fixes through one `HCLK_CMT_PHASERIN_RCLK<n>` →
+`HCLK_CMT_MUX_PHSR_PERFCLK<m>` pair. The pairs walk all 16 positions
+across tiles and specimens: on xc7a100t, each one 12 times. Left to
+itself, Vivado fills the mux in a fixed order (PERFCLK0 from RCLK2, then
+PERFCLK1 from RCLK3, then PERFCLK2 from RCLK0), so the randomised
+population only reaches 6 positions, and only in nested sets.
+`forced_routes.txt` records each fixed route (or `no_path`), and
+`forced_check.txt` records the pip Vivado routed.
+
 ## Tags
 
 From generate.tcl's dumps of what Vivado placed and routed
@@ -84,6 +95,36 @@ From generate.tcl's dumps of what Vivado placed and routed
 - All four are 0 on an unused site.
 
 The names follow BUFHCE's rows in `segbits_clk_hrow_*.db`.
+
+## The PHASERIN -> PHSR_PERFCLK rows
+
+Every bit of these 16 pips is shared with other pips, so segmatch gives
+them one bit or none. Each pip sets:
+
+- a source bit for `RCLK<n>`, common to all four `PERFCLK<m>`: RCLK0
+  `29_132`, RCLK1 `28_132`, RCLK2 `29_131`, RCLK3 `28_131`, like the
+  `29_134` / `28_134` / `29_133` / `28_133` of the `MMCM_MUXED` rows;
+- two bits of a row/column code for `PERFCLK<m>`, a grid that the
+  `MMCM_MUXED` inputs of the same mux use too. For PERFCLK0, the columns
+  are `26_176 26_177 26_178` and the rows are `26_180 27_179`: MUXED0 is
+  `26_176 26_180`, and RCLK0 is `26_176 27_179`.
+
+RCLK1's rows have a fourth bit, `29_27`. It is set in every one-hot tile
+whose pip comes from RCLK1, and never otherwise. It is far from the mux's
+other bits, so it may belong to the PHASER_IN route-through that feeds
+RCLK1 rather than to this mux. A fuzzer for the CMT_TOP PHASER_IN tiles
+would settle that.
+
+`onehot_rows.py` writes these rows in place of segmatch's. A pip's row is
+the bits set in every one-hot tile that has it, minus the bits common to
+all one-hot tiles, and minus the bits of the seed database's other rows
+for the tile type: a correlation with an existing row is not a new row. It
+then checks the rows against every specimen of the run. In each HCLK_CMT
+tile, the union of the rows of the pips routed there must be exactly the
+bits of these rows that are set. If any tile disagrees, it writes nothing
+and fails. On xc7a100t, the rows explain all 522 tiles of 87 specimens,
+330 of which (the randomised and fixed specimens) played no part in
+deriving them.
 
 ## Thresholds and publishing
 
@@ -103,6 +144,9 @@ in `HCLK_CMT_L` on xc7a100t:
   `MUX_CLKINT_1`, and the row needs review before it is merged.
 
 `make gate` fails unless `BUFMRCE_X0Y0.IN_USE` of `HCLK_CMT_L` comes back
-with `28_187`, the bit Vivado sets for a used site 0. `make pushdb` runs
+with `28_187`, the bit Vivado sets for a used site 0, and
+`HCLK_CMT_MUX_PHSR_PERFCLK0.HCLK_CMT_PHASERIN_RCLK2` with exactly
+`26_178 27_179 29_131`, the bits this pip set in the measurements for
+openXC7/nextpnr#15 and in `cal_s0`. `make pushdb` runs
 the gate, then merges only the rows that carry bits; it runs no
 `maskmerge`.
