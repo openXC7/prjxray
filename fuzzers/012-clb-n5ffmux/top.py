@@ -73,7 +73,7 @@ module clb_N5FFMUX (input clk, input [7:0] din, output [7:0] dout);
     reg [3:0] ffds;
     wire lutdo5, lutco5, lutbo5, lutao5;
     //wire lutno5 [3:0] = {lutao5, lutbo5, lutco5, lutdo5};
-    wire lutno5 [3:0] = {lutdo5, lutco5, lutbo5, lutao5};
+    wire [3:0] lutno5 = {lutdo5, lutco5, lutbo5, lutao5};
     always @(*) begin
         if (DEF_A) begin
             //Default poliarty A

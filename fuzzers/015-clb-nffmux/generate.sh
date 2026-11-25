@@ -8,6 +8,5 @@
 # SPDX-License-Identifier: ISC
 
 set -ex
-# (v7: gate disabled, 2020.1 required) if [ $(${XRAY_VIVADO} -h |grep Vivado |cut -d\  -f 2) != "v2017.2" ] ; then echo "FIXME: requires Vivado 2017.2. See https://github.com/SymbiFlow/prjxray/issues/14"; exit 1; fi
 source ${XRAY_DIR}/utils/top_generate.sh
 
