@@ -202,6 +202,11 @@ int BitstreamWriter<ArchType>::writeBitstream(
 	for (int byte = 3; byte >= 0; byte--) {
 		out_file.put((length_of_data >> (byte * 8)) & 0xFF);
 	}
+	out_file.flush();
+	if (!out_file) {
+		std::cerr << "Failed to write " << output_file << std::endl;
+		return 1;
+	}
 	return 0;
 }
 
