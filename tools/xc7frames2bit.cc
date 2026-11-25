@@ -9,6 +9,7 @@
  */
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <type_traits>
 
 #include <gflags/gflags.h>
@@ -38,8 +39,14 @@ DEFINE_int32(spi_buswidth,
 DEFINE_bool(spi_32bit_addr,
             false,
             "Read the SPI flash with 32-bit addresses, like Vivado's "
-            "BITSTREAM.CONFIG.SPI_32BIT_ADDR. Needs --spi_buswidth. "
-            "Series7 only.");
+            "BITSTREAM.CONFIG.SPI_32BIT_ADDR. Without --spi_buswidth "
+            "the bus width is 1, as in Vivado. Series7 only.");
+DEFINE_int32(configrate,
+             0,
+             "Master configuration clock rate in MHz, like Vivado's "
+             "BITSTREAM.CONFIG.CONFIGRATE: 3, 6, 9, 12, 16, 22, 26, 33, "
+             "40, 50 or 66. 0 (the default) keeps the device default, "
+             "3 MHz. Series7 only.");
 
 namespace xilinx = prjxray::xilinx;
 
@@ -49,11 +56,12 @@ struct Frames2BitWriter {
 		using ArchType = std::decay_t<decltype(arg)>;
 		constexpr bool is_series7 =
 		    std::is_same<ArchType, xilinx::Series7>::value;
-		if (!is_series7 &&
-		    (FLAGS_spi_buswidth || FLAGS_spi_32bit_addr)) {
-			std::cerr << "--spi_buswidth and --spi_32bit_addr are "
-			             "only supported for Series7"
-			          << std::endl;
+		if (!is_series7 && (FLAGS_spi_buswidth ||
+		                    FLAGS_spi_32bit_addr || FLAGS_configrate)) {
+			std::cerr
+			    << "--spi_buswidth, --spi_32bit_addr and "
+			       "--configrate are only supported for Series7"
+			    << std::endl;
 			return 1;
 		}
 		if (FLAGS_spi_buswidth != 0 && FLAGS_spi_buswidth != 1 &&
@@ -62,8 +70,11 @@ struct Frames2BitWriter {
 			          << std::endl;
 			return 1;
 		}
-		if (FLAGS_spi_32bit_addr && FLAGS_spi_buswidth == 0) {
-			std::cerr << "--spi_32bit_addr needs --spi_buswidth"
+		const std::set<int> config_rates{0,  3,  6,  9,  12, 16,
+		                                 22, 26, 33, 40, 50, 66};
+		if (!config_rates.count(FLAGS_configrate)) {
+			std::cerr << "--configrate must be one of 3, 6, 9, 12, "
+			             "16, 22, 26, 33, 40, 50 or 66"
 			          << std::endl;
 			return 1;
 		}
@@ -129,11 +140,19 @@ struct Frames2BitWriter {
 		xilinx::Configuration<ArchType>::createConfigurationPackage(
 		    configuration_package, configuration_packet_data, part);
 		if constexpr (is_series7) {
-			if (FLAGS_spi_buswidth) {
+			// Vivado sets the bus width to 1 when only
+			// SPI_32BIT_ADDR is given.
+			if (FLAGS_spi_buswidth || FLAGS_spi_32bit_addr) {
 				xilinx::Configuration<ArchType>::
 				    addSpiReadOptions(configuration_package,
-				                      FLAGS_spi_buswidth,
+				                      FLAGS_spi_buswidth
+				                          ? FLAGS_spi_buswidth
+				                          : 1,
 				                      FLAGS_spi_32bit_addr);
+			}
+			if (FLAGS_configrate) {
+				xilinx::Configuration<ArchType>::setConfigRate(
+				    configuration_package, FLAGS_configrate);
 			}
 		}
 		// Vivado pads a bitstream for 32-bit SPI addresses with

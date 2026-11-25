@@ -9,6 +9,7 @@
  */
 #include <cstdint>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -356,17 +357,16 @@ TEST(ConfigurationTest, SpiReadOptionsMatchVivado) {
 	Configuration<Series7>::PacketData packet_data(101, 0);
 
 	// The BSPI values Vivado 2025.2 writes for
-	// BITSTREAM.CONFIG.SPI_BUSWIDTH 1, 2 and 4, and for 4 with
+	// BITSTREAM.CONFIG.SPI_BUSWIDTH 1, 2 and 4, without and with
 	// BITSTREAM.CONFIG.SPI_32BIT_ADDR YES.
 	const struct {
 		int bus_width;
 		bool address_32bit;
 		uint32_t bspi;
 	} cases[] = {
-	    {1, false, 0x0000000B},
-	    {2, false, 0x0000013B},
-	    {4, false, 0x0000026B},
-	    {4, true, 0x0000026C},
+	    {1, false, 0x0000000B}, {2, false, 0x0000013B},
+	    {4, false, 0x0000026B}, {1, true, 0x0000000C},
+	    {2, true, 0x0000013C},  {4, true, 0x0000026C},
 	};
 	for (const auto& c : cases) {
 		Series7::ConfigurationPackage plain;
@@ -401,5 +401,47 @@ TEST(ConfigurationTest, SpiReadOptionsMatchVivado) {
 	}
 	Series7::ConfigurationPackage bad;
 	EXPECT_THROW(Configuration<Series7>::addSpiReadOptions(bad, 3, false),
+	             std::invalid_argument);
+}
+
+TEST(ConfigurationTest, ConfigRateMatchesVivado) {
+	auto test_part = absl::optional<xc7series::Part>(xc7series::Part(
+	    0x1234,
+	    std::vector<xc7series::FrameAddress>{xc7series::FrameAddress(
+	        xc7series::BlockType::CLB_IO_CLK, false, 0, 0, 0)}));
+	Configuration<Series7>::PacketData packet_data(101, 0);
+
+	// The COR0 values Vivado 2025.2 writes for each
+	// BITSTREAM.CONFIG.CONFIGRATE; 3 MHz is also the default.
+	const std::map<int, uint32_t> cor0{
+	    {3, 0x02003FE5},  {6, 0x02203FE5},  {9, 0x02023FE5},
+	    {12, 0x02403FE5}, {16, 0x02223FE5}, {22, 0x02083FE5},
+	    {26, 0x02243FE5}, {33, 0x02423FE5}, {40, 0x02163FE5},
+	    {50, 0x022A3FE5}, {66, 0x02303FE5},
+	};
+	auto find_cor0 = [](const Series7::ConfigurationPackage& packets) {
+		for (auto& packet : packets) {
+			if (packet->address() == Series7::ConfRegType::COR0) {
+				return packet->data()[0];
+			}
+		}
+		return 0u;
+	};
+	Series7::ConfigurationPackage plain;
+	Configuration<Series7>::createConfigurationPackage(plain, packet_data,
+	                                                   test_part);
+	EXPECT_EQ(find_cor0(plain), cor0.at(3));
+	for (const auto& c : cor0) {
+		Series7::ConfigurationPackage packets;
+		Configuration<Series7>::createConfigurationPackage(
+		    packets, packet_data, test_part);
+		Configuration<Series7>::setConfigRate(packets, c.first);
+		ASSERT_EQ(packets.size(), plain.size());
+		EXPECT_EQ(find_cor0(packets), c.second) << c.first << " MHz";
+	}
+	Series7::ConfigurationPackage packets;
+	Configuration<Series7>::createConfigurationPackage(packets, packet_data,
+	                                                   test_part);
+	EXPECT_THROW(Configuration<Series7>::setConfigRate(packets, 10),
 	             std::invalid_argument);
 }

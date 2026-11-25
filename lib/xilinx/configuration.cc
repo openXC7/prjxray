@@ -524,6 +524,44 @@ void Configuration<Series7>::addSpiReadOptions(
 }
 
 template <>
+void Configuration<Series7>::setConfigRate(
+    Series7::ConfigurationPackage& out_packets,
+    int mhz) {
+	using ConfigurationRegister = Series7::ConfRegType;
+	// COR0[22:17] (OSCFSEL) for each BITSTREAM.CONFIG.CONFIGRATE value,
+	// as Vivado 2025.2 writes it. The codes are not monotonic in the
+	// rate, so they are listed rather than computed.
+	static const std::map<int, uint32_t> kOscfsel{
+	    {3, 0x00},  {6, 0x10},  {9, 0x01},  {12, 0x20},
+	    {16, 0x11}, {22, 0x04}, {26, 0x12}, {33, 0x21},
+	    {40, 0x0B}, {50, 0x15}, {66, 0x18},
+	};
+	auto oscfsel = kOscfsel.find(mhz);
+	if (oscfsel == kOscfsel.end()) {
+		throw std::invalid_argument(
+		    "configuration rate must be one of 3, 6, 9, 12, 16, 22, "
+		    "26, 33, 40, 50 or 66 MHz");
+	}
+	for (auto& packet : out_packets) {
+		if (packet->opcode() ==
+		        ConfigurationPacket<
+		            ConfigurationRegister>::Opcode::Write &&
+		    packet->address() == ConfigurationRegister::COR0 &&
+		    packet->data().size() == 1) {
+			const uint32_t cor0 = bit_field_set<uint32_t>(
+			    packet->data()[0], 22, 17, oscfsel->second);
+			packet.reset(new ConfigurationPacketWithPayload<
+			             1, ConfigurationRegister>(
+			    ConfigurationPacket<
+			        ConfigurationRegister>::Opcode::Write,
+			    ConfigurationRegister::COR0, {cor0}));
+			return;
+		}
+	}
+	throw std::invalid_argument("configuration package has no COR0 write");
+}
+
+template <>
 void Configuration<UltraScale>::createConfigurationPackage(
     UltraScale::ConfigurationPackage& out_packets,
     const PacketData& packet_data,

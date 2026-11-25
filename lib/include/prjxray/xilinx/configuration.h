@@ -75,6 +75,15 @@ class Configuration {
 	    int bus_width,
 	    bool address_32bit);
 
+	// Sets the master configuration clock rate in the COR0 write that
+	// createConfigurationPackage adds, like Vivado's
+	// BITSTREAM.CONFIG.CONFIGRATE. mhz must be one of the nominal rates
+	// Vivado accepts: 3, 6, 9, 12, 16, 22, 26, 33, 40, 50 or 66. Only
+	// Series-7 has it.
+	static void setConfigRate(
+	    typename ArchType::ConfigurationPackage& out_packets,
+	    int mhz);
+
 	// Returns the payload for a type 2 packet
 	// which allows for bigger payload compared to type 1.
 	static PacketData createType2ConfigurationPacketData(
@@ -135,6 +144,11 @@ void Configuration<Series7>::addSpiReadOptions(
     Series7::ConfigurationPackage& out_packets,
     int bus_width,
     bool address_32bit);
+
+template <>
+void Configuration<Series7>::setConfigRate(
+    Series7::ConfigurationPackage& out_packets,
+    int mhz);
 
 template <>
 void Configuration<UltraScale>::createConfigurationPackage(
