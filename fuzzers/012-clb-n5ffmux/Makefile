@@ -5,8 +5,6 @@
 # https://opensource.org/licenses/ISC
 #
 # SPDX-License-Identifier: ISC
-# top.py fixes random.seed(0), so every specimen is the same design and
-# more than one adds nothing (#113).
-N := 1
+N := 10
 SEGMATCH_ARGS =-m 2 -M 2 -c 1
 include ../clb.mk
