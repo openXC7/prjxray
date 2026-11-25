@@ -18,6 +18,7 @@ import os
 import os.path
 import re
 import resource
+import shutil
 import signal
 import subprocess
 import sys
@@ -370,6 +371,19 @@ def get_memory(memstr=None):
     return memory
 
 
+def get_disk(path):
+    """Return the total, used and free bytes of the file system that holds path.
+
+    >>> disk = get_disk('.')
+    >>> sorted(disk)
+    ['free', 'total', 'used']
+    >>> all(isinstance(v, int) for v in disk.values())
+    True
+    """
+    usage = shutil.disk_usage(path)
+    return {'total': usage.total, 'used': usage.used, 'free': usage.free}
+
+
 def should_run_submake(make_flags):
     """Check if make_flags indicate that we should execute things.
 
@@ -578,12 +592,15 @@ def run_fuzzer(fuzzer_name, fuzzer_dir, fuzzer_logdir, logger, will_retry):
             if retcode is not None:
                 break
             mem = get_memory()['mem']
+            disk = get_disk(fuzzer_dir)
             log(
-                "Still running (1m:{:0.2f}%, 5m:{:0.2f}%, 15m:{:0.2f}% Mem:{:0.1f}Gi used, {:0.1f}Gi free).\n{}",
+                "Still running (1m:{:0.2f}%, 5m:{:0.2f}%, 15m:{:0.2f}% Mem:{:0.1f}Gi used, {:0.1f}Gi free, Disk:{:0.1f}Gi used, {:0.1f}Gi free).\n{}",
                 *get_load(),
                 mem['used'] / 1e9,
                 mem['available'] /
                 1e9,  # Using available so the numbers add up.
+                disk['used'] / 1e9,
+                disk['free'] / 1e9,
                 PsTree.get(p.pid),
             )
     except (Exception, KeyboardInterrupt, SystemExit):
