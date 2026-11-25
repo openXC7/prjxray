@@ -43,7 +43,8 @@ Measured with Vivado 2025.2 on xc7a100tcsg324-1 and xc7a35tcpg236-1:
 
 ## Specimens
 
-`make` builds `N` (default 50) randomised specimens plus five fixed ones:
+`make` builds `N` (default 50) randomised specimens, five fixed ones and
+the one-hot population described below:
 
 | Specimen | Shape |
 |---|---|
@@ -68,8 +69,8 @@ must drive something.
 Every BUFR clocks two flops in its region. Only HR banks (`HCLK_IOI3`) are
 used for now.
 
-A third population, `make database-onehot` (`ONEHOT_N` specimens,
-`specimen_P_*`, default 32), has one pad-fed BUFMR per HCLK_CMT tile whose
+A third population, `ONEHOT_N` specimens (`specimen_P_*`, default 32),
+has one pad-fed BUFMR per HCLK_CMT tile whose
 route generate.tcl fixes through one `HCLK_CMT_PHASERIN_RCLK<n>` →
 `HCLK_CMT_MUX_PHSR_PERFCLK<m>` pair. The pairs walk all 16 positions
 across tiles and specimens: on xc7a100t, each one 12 times. Left to
