@@ -9,6 +9,7 @@
  */
 #include <cstdint>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -345,4 +346,60 @@ TEST(ConfigurationTest, CheckForPaddingFrames) {
 	for (auto& frame : test_config->frames()) {
 		EXPECT_EQ(frame.second, frames.getFrames().at(frame.first));
 	}
+}
+
+TEST(ConfigurationTest, SpiReadOptionsMatchVivado) {
+	auto test_part = absl::optional<xc7series::Part>(xc7series::Part(
+	    0x1234,
+	    std::vector<xc7series::FrameAddress>{xc7series::FrameAddress(
+	        xc7series::BlockType::CLB_IO_CLK, false, 0, 0, 0)}));
+	Configuration<Series7>::PacketData packet_data(101, 0);
+
+	// The BSPI values Vivado 2025.2 writes for
+	// BITSTREAM.CONFIG.SPI_BUSWIDTH 1, 2 and 4, and for 4 with
+	// BITSTREAM.CONFIG.SPI_32BIT_ADDR YES.
+	const struct {
+		int bus_width;
+		bool address_32bit;
+		uint32_t bspi;
+	} cases[] = {
+	    {1, false, 0x0000000B},
+	    {2, false, 0x0000013B},
+	    {4, false, 0x0000026B},
+	    {4, true, 0x0000026C},
+	};
+	for (const auto& c : cases) {
+		Series7::ConfigurationPackage plain;
+		Configuration<Series7>::createConfigurationPackage(
+		    plain, packet_data, test_part);
+		Series7::ConfigurationPackage spi;
+		Configuration<Series7>::createConfigurationPackage(
+		    spi, packet_data, test_part);
+		Configuration<Series7>::addSpiReadOptions(spi, c.bus_width,
+		                                          c.address_32bit);
+
+		// The first packet stays, then BSPI, CMD BSPI_READ and a
+		// NOP, then the rest unchanged.
+		ASSERT_EQ(spi.size(), plain.size() + 3);
+		EXPECT_EQ(spi[0]->opcode(), plain[0]->opcode());
+		EXPECT_EQ(
+		    spi[1]->opcode(),
+		    ConfigurationPacket<Series7::ConfRegType>::Opcode::Write);
+		EXPECT_EQ(spi[1]->address(), Series7::ConfRegType::BSPI);
+		ASSERT_EQ(spi[1]->data().size(), 1);
+		EXPECT_EQ(spi[1]->data()[0], c.bspi);
+		EXPECT_EQ(spi[2]->address(), Series7::ConfRegType::CMD);
+		ASSERT_EQ(spi[2]->data().size(), 1);
+		EXPECT_EQ(spi[2]->data()[0], 0x12u);
+		EXPECT_EQ(
+		    spi[3]->opcode(),
+		    ConfigurationPacket<Series7::ConfRegType>::Opcode::NOP);
+		for (size_t i = 1; i < plain.size(); i++) {
+			EXPECT_EQ(spi[i + 3]->address(), plain[i]->address());
+			EXPECT_EQ(spi[i + 3]->data(), plain[i]->data());
+		}
+	}
+	Series7::ConfigurationPackage bad;
+	EXPECT_THROW(Configuration<Series7>::addSpiReadOptions(bad, 3, false),
+	             std::invalid_argument);
 }

@@ -63,6 +63,18 @@ class Configuration {
 	    const PacketData& packet_data,
 	    absl::optional<typename ArchType::Part>& part);
 
+	// Adds the packets that tell the device how to read the rest of the
+	// bitstream from SPI flash: the bus width (1, 2 or 4) and whether
+	// the flash takes 32-bit addresses. This matches what Vivado writes
+	// for BITSTREAM.CONFIG.SPI_BUSWIDTH and
+	// BITSTREAM.CONFIG.SPI_32BIT_ADDR: a write of the BSPI register and a
+	// BSPI_READ command right after the first packet. Call it after
+	// createConfigurationPackage. Only Series-7 has it.
+	static void addSpiReadOptions(
+	    typename ArchType::ConfigurationPackage& out_packets,
+	    int bus_width,
+	    bool address_32bit);
+
 	// Returns the payload for a type 2 packet
 	// which allows for bigger payload compared to type 1.
 	static PacketData createType2ConfigurationPacketData(
@@ -117,6 +129,12 @@ void Configuration<Series7>::createConfigurationPackage(
     Series7::ConfigurationPackage& out_packets,
     const PacketData& packet_data,
     absl::optional<Series7::Part>& part);
+
+template <>
+void Configuration<Series7>::addSpiReadOptions(
+    Series7::ConfigurationPackage& out_packets,
+    int bus_width,
+    bool address_32bit);
 
 template <>
 void Configuration<UltraScale>::createConfigurationPackage(

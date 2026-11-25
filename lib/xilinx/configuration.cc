@@ -9,6 +9,7 @@
  */
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_split.h>
@@ -467,6 +468,59 @@ void Configuration<Series7>::createConfigurationPackage(
 		out_packets.emplace_back(
 		    new NopPacket<ConfigurationRegister>());
 	}
+}
+
+template <>
+void Configuration<Series7>::addSpiReadOptions(
+    Series7::ConfigurationPackage& out_packets,
+    int bus_width,
+    bool address_32bit) {
+	using ConfigurationRegister = Series7::ConfRegType;
+	// BSPI: bits [9:8] are the bus width, the low byte is the read
+	// opcode the device sends to the flash. These are the values Vivado
+	// writes: fast read 0x0B, dual output 0x3B and quad output 0x6B, and
+	// their 4-byte-address forms 0x0C, 0x3C and 0x6C.
+	uint32_t width_field;
+	uint32_t opcode;
+	switch (bus_width) {
+		case 1:
+			width_field = 0;
+			opcode = 0x0B;
+			break;
+		case 2:
+			width_field = 1;
+			opcode = 0x3B;
+			break;
+		case 4:
+			width_field = 2;
+			opcode = 0x6B;
+			break;
+		default:
+			throw std::invalid_argument(
+			    "SPI bus width must be 1, 2 or 4");
+	}
+	if (address_32bit) {
+		opcode += 1;
+	}
+	const uint32_t bspi = (width_field << 8) | opcode;
+
+	// Vivado writes these right after the first NOP that follows the
+	// sync word, which is the first packet createConfigurationPackage
+	// adds.
+	Series7::ConfigurationPackage spi_packets;
+	spi_packets.emplace_back(
+	    new ConfigurationPacketWithPayload<1, ConfigurationRegister>(
+	        ConfigurationPacket<ConfigurationRegister>::Opcode::Write,
+	        ConfigurationRegister::BSPI, {bspi}));
+	spi_packets.emplace_back(
+	    new ConfigurationPacketWithPayload<1, ConfigurationRegister>(
+	        ConfigurationPacket<ConfigurationRegister>::Opcode::Write,
+	        ConfigurationRegister::CMD,
+	        {static_cast<uint32_t>(xc7series::Command::BSPI_READ)}));
+	spi_packets.emplace_back(new NopPacket<ConfigurationRegister>());
+	auto position =
+	    out_packets.empty() ? out_packets.end() : out_packets.begin() + 1;
+	out_packets.insert(position, spi_packets.begin(), spi_packets.end());
 }
 
 template <>

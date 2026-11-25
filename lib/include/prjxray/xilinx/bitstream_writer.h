@@ -134,13 +134,16 @@ class BitstreamWriter {
 
 	// Writes out the complete bitstream for Xilinx FPGA based on
 	// the Configuration Package which holds the complete programming
-	// sequence.
+	// sequence. extra_padding_words adds that many 0xFFFFFFFF words
+	// before the bus width detection pattern; Vivado adds 64 of them
+	// (256 bytes) for BITSTREAM.CONFIG.SPI_32BIT_ADDR.
 	int writeBitstream(
 	    const typename ArchType::ConfigurationPackage& packets,
 	    const std::string& part_name,
 	    const std::string& frames_file,
 	    const std::string& generator_name,
-	    const std::string& output_file);
+	    const std::string& output_file,
+	    size_t extra_padding_words = 0);
 	iterator begin();
 	iterator end();
 
@@ -162,7 +165,8 @@ int BitstreamWriter<ArchType>::writeBitstream(
     const std::string& part_name,
     const std::string& frames_file,
     const std::string& generator_name,
-    const std::string& output_file) {
+    const std::string& output_file,
+    size_t extra_padding_words) {
 	std::ofstream out_file(output_file, std::ofstream::binary);
 	if (!out_file) {
 		std::cerr << "Unable to open file for writting: " << output_file
@@ -181,6 +185,11 @@ int BitstreamWriter<ArchType>::writeBitstream(
 
 	BitstreamWriter<ArchType> out_bitstream_writer(packets);
 	int bytes_per_word = sizeof(typename ArchType::WordType);
+	for (size_t word = 0; word < extra_padding_words; word++) {
+		for (int byte = 0; byte < bytes_per_word; byte++) {
+			out_file.put(0xFF);
+		}
+	}
 	for (uint32_t word : out_bitstream_writer) {
 		for (int byte = bytes_per_word - 1; byte >= 0; byte--) {
 			out_file.put((word >> (byte * 8)) & 0xFF);

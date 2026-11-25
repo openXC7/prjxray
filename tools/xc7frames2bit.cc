@@ -9,6 +9,7 @@
  */
 #include <iomanip>
 #include <iostream>
+#include <type_traits>
 
 #include <gflags/gflags.h>
 #include <prjxray/xilinx/architectures.h>
@@ -27,6 +28,18 @@ DEFINE_string(output_file, "", "Write bitstream to file");
 DEFINE_string(architecture,
               "Series7",
               "Architecture of the provided bitstream");
+DEFINE_int32(spi_buswidth,
+             0,
+             "SPI flash bus width the device switches to after reading the "
+             "start of the bitstream: 1, 2 or 4, like Vivado's "
+             "BITSTREAM.CONFIG.SPI_BUSWIDTH. 0 (the default) adds no "
+             "packets for it, as Vivado does when the property is not "
+             "set. Series7 only.");
+DEFINE_bool(spi_32bit_addr,
+            false,
+            "Read the SPI flash with 32-bit addresses, like Vivado's "
+            "BITSTREAM.CONFIG.SPI_32BIT_ADDR. Needs --spi_buswidth. "
+            "Series7 only.");
 
 namespace xilinx = prjxray::xilinx;
 
@@ -34,6 +47,27 @@ struct Frames2BitWriter {
 	template <typename T>
 	int operator()(T& arg) {
 		using ArchType = std::decay_t<decltype(arg)>;
+		constexpr bool is_series7 =
+		    std::is_same<ArchType, xilinx::Series7>::value;
+		if (!is_series7 &&
+		    (FLAGS_spi_buswidth || FLAGS_spi_32bit_addr)) {
+			std::cerr << "--spi_buswidth and --spi_32bit_addr are "
+			             "only supported for Series7"
+			          << std::endl;
+			return 1;
+		}
+		if (FLAGS_spi_buswidth != 0 && FLAGS_spi_buswidth != 1 &&
+		    FLAGS_spi_buswidth != 2 && FLAGS_spi_buswidth != 4) {
+			std::cerr << "--spi_buswidth must be 1, 2 or 4"
+			          << std::endl;
+			return 1;
+		}
+		if (FLAGS_spi_32bit_addr && FLAGS_spi_buswidth == 0) {
+			std::cerr << "--spi_32bit_addr needs --spi_buswidth"
+			          << std::endl;
+			return 1;
+		}
+
 		auto part = ArchType::Part::FromFile(FLAGS_part_file);
 		if (!part) {
 			std::cerr << "Part file " << FLAGS_part_file
@@ -94,13 +128,27 @@ struct Frames2BitWriter {
 		typename ArchType::ConfigurationPackage configuration_package;
 		xilinx::Configuration<ArchType>::createConfigurationPackage(
 		    configuration_package, configuration_packet_data, part);
+		if constexpr (is_series7) {
+			if (FLAGS_spi_buswidth) {
+				xilinx::Configuration<ArchType>::
+				    addSpiReadOptions(configuration_package,
+				                      FLAGS_spi_buswidth,
+				                      FLAGS_spi_32bit_addr);
+			}
+		}
+		// Vivado pads a bitstream for 32-bit SPI addresses with
+		// 256 more 0xFF bytes before the bus width detection
+		// pattern.
+		const size_t extra_padding_words =
+		    FLAGS_spi_32bit_addr ? 256 / sizeof(uint32_t) : 0;
 
 		// Write bitstream
 		auto bitstream_writer =
 		    xilinx::BitstreamWriter<ArchType>(configuration_package);
 		if (bitstream_writer.writeBitstream(
 		        configuration_package, FLAGS_part_name, FLAGS_frm_file,
-		        "xc7frames2bit", FLAGS_output_file)) {
+		        "xc7frames2bit", FLAGS_output_file,
+		        extra_padding_words)) {
 			std::cerr << "Failed to write bitstream" << std::endl
 			          << "Exitting" << std::endl;
 			return 1;
