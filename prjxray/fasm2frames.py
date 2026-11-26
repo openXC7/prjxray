@@ -159,6 +159,50 @@ def add_fabric_tilename_aliases(tile_to_bank, bank_to_tile, db_root, part_data):
             .format(added, replaced))
 
 
+_IOB33_TILE_RE = re.compile(r"^[LR]IOB33(_SING)?$")
+
+
+def add_unbonded_iob33_tiles(db, tile_to_bank, bank_to_tile):
+    """Add the IOB33 tiles of each bank that the package doesn't bond out.
+
+    package_pins.csv lists bonded pins only, but Vivado sets STEPDOWN on every
+    IOB33 of a bank, bonded or not (#84): with one LVCMOS18 output on
+    xc7a35tcpg236-1, all 26 IOB33 tiles of the bank get it, of which
+    package_pins.csv has 6 (bank 16) or 11 (bank 35).
+
+    A bank is the IOB33 tiles of one clock region in the IO column next to
+    the bank's HCLK_IOI3 anchor tile, which is already in bank_to_tile from
+    part.json.
+    """
+    grid = db.grid()
+    by_region = defaultdict(list)
+    for tile in grid.tiles():
+        gridinfo = grid.gridinfo_at_tilename(tile)
+        if gridinfo.clock_region is None or \
+                not _IOB33_TILE_RE.match(gridinfo.tile_type):
+            continue
+        loc = grid.loc_of_tilename(tile)
+        by_region[gridinfo.clock_region.name].append((loc.grid_x, tile))
+
+    for bank, tiles in list(bank_to_tile.items()):
+        anchors = [t for t in tiles if t.startswith("HCLK_IOI3_")]
+        for anchor in anchors:
+            gridinfo = grid.gridinfo_at_tilename(anchor)
+            if gridinfo.clock_region is None:
+                continue
+            candidates = by_region.get(gridinfo.clock_region.name, [])
+            if not candidates:
+                continue
+            anchor_x = grid.loc_of_tilename(anchor).grid_x
+            column = min(
+                {x
+                 for x, _ in candidates}, key=lambda x: abs(x - anchor_x))
+            for x, tile in candidates:
+                if x == column:
+                    tiles.add(tile)
+                    tile_to_bank.setdefault(tile, bank)
+
+
 def find_pudc_b(db):
     """ Find PUDC_B pin func in grid, and return the tile and site prefix.
 
@@ -248,6 +292,7 @@ def run(
             tile_to_bank[pin["tile"]] = pin["bank"]
 
         add_fabric_tilename_aliases(tile_to_bank, bank_to_tile, db_root, part_data)
+        add_unbonded_iob33_tiles(db, tile_to_bank, bank_to_tile)
 
     # Resolve PUDC_B site unconditionally — we need the tile name later in the
     # HP-bank glue walk to skip it (Vivado does not set IBUF_HP_BANK_GLUE on

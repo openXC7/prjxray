@@ -292,5 +292,65 @@
         },
         "prohibited_sites": [],
         "type": "LIOI"
+    },
+    "HCLK_IOI3_X150Y26": {
+        "bits": {
+            "CLB_IO_CLK": {
+                "baseaddr": "0x00402000",
+                "frames": 42,
+                "offset": 50,
+                "words": 1
+            }
+        },
+        "clock_region": "X2Y0",
+        "grid_x": 150,
+        "grid_y": 130,
+        "pin_functions": {},
+        "sites": {},
+        "prohibited_sites": [],
+        "type": "HCLK_IOI3"
+    },
+    "RIOB33_X60Y1": {
+        "bits": {
+            "CLB_IO_CLK": {
+                "baseaddr": "0x00402000",
+                "frames": 42,
+                "offset": 2,
+                "words": 4
+            }
+        },
+        "clock_region": "X2Y0",
+        "grid_x": 151,
+        "grid_y": 154,
+        "pin_functions": {
+            "IOB_X3Y1": "IO_L24N_T3_77",
+            "IOB_X3Y2": "IO_L24P_T3_77"
+        },
+        "sites": {
+            "IOB_X3Y1": "IOB33S",
+            "IOB_X3Y2": "IOB33M"
+        },
+        "prohibited_sites": [],
+        "type": "RIOB33"
+    },
+    "RIOB33_X60Y3": {
+        "bits": {
+            "CLB_IO_CLK": {
+                "baseaddr": "0x00402000",
+                "frames": 42,
+                "offset": 6,
+                "words": 4
+            }
+        },
+        "clock_region": "X2Y0",
+        "grid_x": 151,
+        "grid_y": 152,
+        "pin_functions": {},
+        "sites": {
+            "IOB_X3Y3": "IOB33S",
+            "IOB_X3Y4": "IOB33M"
+        },
+        "prohibited_sites": [],
+        "type": "RIOB33"
     }
 }
