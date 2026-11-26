@@ -160,3 +160,85 @@ Creating the fuzzer
 4.  Modify the *generate.py* script to insert the tags, which signify
     whether a feature is disabled or enabled in a site, based on the
     csv parameters file generated in step 1
+
+Looping fuzzers
++++++++++++++++
+
+Some fuzzers, mostly the ones that solve interconnect PIPs (for example
+``050-pip-seed``, ``056-pip-rem``, ``037-iob-pips``, ``041-clk-hrow-pips``
+and ``101-dsp-pips``), cannot solve all their bits from one set of
+specimens. Their Makefiles include ``fuzzers/pip_loop.mk``, directly or
+through ``fuzzers/int_loop.mk``, and the fuzzer runs in iterations. Each
+iteration builds ``N`` specimens for a random sample of the PIPs that are
+still unsolved, solves them, and adds the result to a copy of the database
+in the fuzzer's ``build/database``, from which the next iteration's list of
+unsolved PIPs is computed.
+
+For these fuzzers ``make`` and ``make run`` do different things:
+
+-   ``make`` (target ``all``, which is ``database``) runs a single
+    iteration, ``ITER=1``, and leaves its result in ``build``. It does not
+    loop and does not update the database in ``XRAY_DATABASE_DIR``, so on
+    its own it gives a partial result. It is useful to debug one
+    iteration.
+
+-   ``make run`` runs ``make clean`` and then ``fuzzers/int_loop.sh``,
+    which repeats iterations until ``fuzzers/int_loop_check.py`` reports
+    that the fuzzer is done, runs ``make pushdb`` to merge the result into
+    the database, and creates ``run.ok``. This is the target that
+    ``make`` in ``fuzzers`` runs for each fuzzer, through
+    ``fuzzers/run_fuzzer.py`` (or directly with ``VERBOSE=Y``).
+
+Each iteration of ``int_loop.sh`` runs ``make ITER=<i> cleaniter``, builds
+``build/todo.txt``, asks ``int_loop_check.py`` whether to stop, and if not,
+runs ``make ITER=<i> database``. If the first list of unsolved PIPs is
+empty, it stops at once.
+
+These variables control the loop. A fuzzer's Makefile may set its own
+values, and they can be given on the command line:
+
+-   ``ITER`` - the iteration number. ``int_loop.sh`` sets it; the default
+    is 1.
+
+-   ``N`` - the number of specimens in each iteration; the default is 20.
+
+-   ``TODO_N`` - how many unsolved PIPs are sampled into each iteration's
+    ``build/todo.txt``; the default is 50.
+
+-   ``QUICK=Y`` - a smoke test: one specimen with 3 PIPs, a single
+    iteration, and no ``pushdb``, since such a result may be undersolved.
+
+-   ``CHECK_ARGS`` - the arguments of ``int_loop_check.py``, which decide
+    when the loop stops. The default is
+    ``--zero-entries --timeout-iters 50``: stop when no unsolved PIPs are
+    left, and fail after 50 iterations. The other options are
+    ``--zero-entries-filter`` (count only the unsolved PIPs that match a
+    regular expression), ``--min-iters``, ``--max-iters`` and
+    ``--min-progress`` (stop when an iteration solves no more than that
+    many PIPs). For example ``050-pip-seed`` uses
+    ``--max-iters 12 --min-progress 50``.
+
+-   ``MAKETODO_FLAGS`` - the arguments of ``fuzzers/int_maketodo.py``,
+    which lists the unsolved PIPs.
+
+The loop leaves these files in ``build``:
+
+-   ``todo_all.txt`` and ``todo.txt`` - all the unsolved PIPs, and the
+    sample the current iteration tries.
+
+-   ``<ITER>/`` - the specimens of each iteration, with copies of its
+    ``todo_all.txt`` and ``todo.txt``.
+
+-   ``todo/<ITER>_all.txt`` - the unsolved PIPs at the start of each
+    iteration. ``int_loop_check.py`` reads these, and their line counts
+    show the progress: ``wc -l build/todo/*_all.txt``.
+
+-   ``todo/timeout`` - written when the loop passes ``--timeout-iters``;
+    ``int_loop.sh`` then stops with an error.
+
+For example::
+
+    cd fuzzers/050-pip-seed
+    make run            # the full loop; updates the database
+    make QUICK=Y run    # a smoke test; does not update the database
+    make CHECK_ARGS="--zero-entries --timeout-iters 10" run
