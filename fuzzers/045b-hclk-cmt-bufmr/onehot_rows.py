@@ -20,7 +20,7 @@ The onehot_perf specimens (specimen_P_*) have exactly one of these pips per
 HCLK_CMT tile, with the route fixed by generate.tcl. A pip's row is the
 bits set in every tile, of any specimen, that has the pip, minus the bits
 set in every one-hot tile (the BUFMRCE site and its pad, which all of them
-share).
+share), and minus CMT_TOP_BITS, which belong to the PHASER_IN tile below.
 
 Nothing is written, and the script fails, unless:
 
@@ -58,6 +58,18 @@ EXPECTED = [
 
 # A pip needs this many one-hot tiles before its row is trusted.
 MIN_ONEHOT = 4
+
+# Bits in HCLK_CMT's word range that belong to the CMT_TOP_*_LOWER_T tile
+# below it: the reference-input mux of its PHASER_IN B, which feeds
+# HCLK_CMT_PHASERIN_RCLK1. Word 45 of the column is HCLK_CMT's first word
+# and also the word of that mux. 29_27 is "own region's reference" (set
+# whenever PHASER_IN B takes the region's own BUFMR, which every specimen's
+# RCLK1 route does), 28_27 picks reference input 1, and 28_28 the region
+# above. Measured by forcing PHASER_IN B onto each of its six reference
+# inputs: own0 29_27, own1 28_27 29_27, below0 none, below1 28_27, above0
+# 28_28, above1 28_27 28_28. They are left out of the rows here and belong
+# to a CMT_TOP fuzzer.
+CMT_TOP_BITS = {"28_27", "29_27", "28_28"}
 
 
 def load_segdata(path):
@@ -149,7 +161,7 @@ def main():
                     len(alone), t, MIN_ONEHOT))
             continue
         on_all = [s for s in all_segs if s["tags"].get(t) == 1]
-        bits = set.intersection(*[s["bits"] for s in on_all]) - common
+        bits = set.intersection(*[s["bits"] for s in on_all]) - common - CMT_TOP_BITS
         if not bits:
             errors.append("no bits: " + t)
             continue

@@ -110,11 +110,25 @@ them one bit or none. Each pip sets:
   are `26_176 26_177 26_178` and the rows are `26_180 27_179`: MUXED0 is
   `26_176 26_180`, and RCLK0 is `26_176 27_179`.
 
-RCLK1's rows have a fourth bit, `29_27`. It is set in every one-hot tile
-whose pip comes from RCLK1, and never otherwise. It is far from the mux's
-other bits, so it may belong to the PHASER_IN route-through that feeds
-RCLK1 rather than to this mux. A fuzzer for the CMT_TOP PHASER_IN tiles
-would settle that.
+In the specimens, every tile whose pip comes from RCLK1 also sets `29_27`.
+That bit is not part of this mux. Word 45 of the CMT column is HCLK_CMT's
+first word, and also holds the reference-input mux of PHASER_IN B in the
+`CMT_TOP_*_LOWER_T` tile below, which feeds RCLK1. `29_27` is that mux's
+"own region" input, which every specimen's RCLK1 route takes. Forcing
+PHASER_IN B onto each of its six reference inputs gives:
+
+| reference input | bits |
+|---|---|
+| own region, 0 | `29_27` |
+| own region, 1 | `28_27 29_27` |
+| region below, 0 | (none) |
+| region below, 1 | `28_27` |
+| region above, 0 | `28_28` |
+| region above, 1 | `28_27 28_28` |
+
+The other three PHASER_INs follow the same code, one word above their
+route-through bits. `onehot_rows.py` leaves these three bits out of the
+rows (`CMT_TOP_BITS`); they belong to a CMT_TOP fuzzer.
 
 `onehot_rows.py` writes these rows in place of segmatch's. A pip's row is
 the bits set in every tile, of any specimen, that has it, minus the bits
