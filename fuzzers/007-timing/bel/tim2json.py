@@ -613,7 +613,9 @@ def read_bel_properties(properties_file, properties_map):
 
                             prop_values_count = int(raw_props[prop_loc + 1])
 
-                            if prop_name not in [
+                            # BRAM variants can have different defaults for the same property.
+                            is_default = prop_name.endswith('.DEFAULT')
+                            if not is_default and prop_name not in [
                                     'RAM_MODE',
                                     'WRITE_WIDTH_A',
                                     'WRITE_WIDTH_B',
