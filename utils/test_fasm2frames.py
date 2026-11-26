@@ -195,6 +195,86 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
         self.bitread_frm_equals(
             'iob/riob_stepdown.fasm', 'iob/riob_stepdown.bits')
 
+    # LIOB33_SING_X0Y0 (offset 0) and LIOB33_SING_X0Y49 (offset 99) are the
+    # bottom and top *_SING tiles of the 0x00400000 frames, both 2 words and
+    # aliased to LIOB33 with start_offset 2 and 0. LIOB33 has IOB_Y1 in
+    # words 0-1 and IOB_Y0 in words 2-3, so the site a SING tile lacks maps
+    # to word -2 (bottom) or 101 (top).
+    def fasm2frames_stderr(self, fin_data, **kw):
+        stderr = StringIO()
+        with mock.patch.object(sys, 'stderr', stderr):
+            bits = frm2bits(self.fasm2frames(fin_data, sparse=True, **kw))
+        return bits, stderr.getvalue()
+
+    def assertOutsideTile(self, tile, feature, words):
+        '''tile.feature warns and sets no bits, or fails with strict=True'''
+        fasm_line = tile + '.' + feature
+        message = (
+            "Feature {} of tile {} has bits outside the tile ({}) from line "
+            "'{}'".format(feature, tile, words, fasm_line))
+
+        bits, stderr = self.fasm2frames_stderr(fasm_line + '\n')
+        # Word -2 used to end up in word 99 of the same frame, a bit of the
+        # top SING tile.
+        self.assertEqual(bits, set())
+        self.assertIn(
+            'WARNING: ' + message + '; leaving those bits out', stderr)
+
+        with self.assertRaisesRegex(fasm_assembler.FasmLookupError,
+                                    re.escape(message)):
+            self.fasm2frames(fasm_line + '\n', strict=True)
+
+    def test_sing_bottom_absent_site(self):
+        '''A bottom SING tile's IOB_Y1 is below the tile, not in word 99'''
+        self.assertOutsideTile(
+            'LIOB33_SING_X0Y0', 'IOB_Y1.SOMETHING.IN',
+            'word -2, but CLB_IO_CLK has words 0-1')
+
+    def test_sing_top_absent_site(self):
+        '''A top SING tile's IOB_Y0 is past the end of the frame'''
+        self.assertOutsideTile(
+            'LIOB33_SING_X0Y49', 'IOB_Y0.SOMETHING.IN',
+            'word 101, but CLB_IO_CLK has words 99-100')
+
+    def test_sing_present_site(self):
+        '''The site a SING tile has is set in the tile's own words'''
+        for strict in (False, True):
+            with self.subTest(strict=strict):
+                bits, stderr = self.fasm2frames_stderr(
+                    'LIOB33_SING_X0Y0.IOB_Y0.SOMETHING.IN\n'
+                    'LIOB33_SING_X0Y49.IOB_Y1.SOMETHING.IN\n',
+                    strict=strict)
+                self.assertEqual(
+                    bits, {(0x00400000, 0, 1), (0x00400000, 99, 1)})
+                self.assertNotIn('outside the tile', stderr)
+
+    def test_main_strict(self):
+        '''main() --strict reports a feature outside its tile and fails'''
+        fasm_line = 'LIOB33_SING_X0Y0.IOB_Y1.SOMETHING.IN'
+        with tempfile.TemporaryDirectory() as d:
+            fn_in = os.path.join(d, 'design.fasm')
+            with open(fn_in, 'w') as f:
+                f.write(fasm_line + '\n')
+            argv = [
+                'fasm2frames', '--db-root',
+                self.filename_test_data('db'), '--part', 'xc7a200tffg1156-1',
+                '--strict', fn_in,
+                os.path.join(d, 'design.frm')
+            ]
+            stderr = StringIO()
+            with mock.patch.object(sys, 'argv', argv), \
+                    mock.patch.object(sys, 'stderr', stderr), \
+                    self.assertRaises(SystemExit) as cm:
+                fasm2frames.main()
+            self.assertEqual(cm.exception.code, 1)
+            self.assertIn(
+                "fasm2frames: error: Feature IOB_Y1.SOMETHING.IN of tile "
+                "LIOB33_SING_X0Y0 has bits outside the tile (word -2, but "
+                "CLB_IO_CLK has words 0-1) from line '{}'".format(fasm_line),
+                stderr.getvalue())
+            self.assertNotIn('Traceback', stderr.getvalue())
+            self.assertEqual(os.listdir(d), ['design.fasm'])
+
     # LIOB18_X1Y10 and LIOI_X2Y10 are grid neighbours sharing baseaddr
     # 0x00421000, offset 18 (the frames of virtex7's LIOB18_X81Y10 and
     # LIOI_X82Y10, renamed so the X81 column's own glue rule stays out).

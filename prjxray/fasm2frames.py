@@ -204,9 +204,10 @@ def run(
         sparse=False,
         roi=None,
         debug=False,
-        emit_pudc_b_pullup=False):
+        emit_pudc_b_pullup=False,
+        strict=False):
     db = Database(db_root, part)
-    assembler = fasm_assembler.FasmAssembler(db)
+    assembler = fasm_assembler.FasmAssembler(db, strict=strict)
 
     set_features = set()
 
@@ -633,6 +634,12 @@ def main():
         help="Emit an IBUF and PULLUP on the PUDC_B pin if unused",
         action='store_true')
     parser.add_argument(
+        '--strict',
+        action='store_true',
+        help="Fail when an aliased tile's feature maps to bits outside the "
+        "tile, for example a feature of the site a *_SING tile does not have "
+        "(default: warn and leave those bits out)")
+    parser.add_argument(
         '--debug', action='store_true', help="Print debug dump")
     parser.add_argument('fn_in', help='Input FPGA assembly (.fasm) file')
     parser.add_argument(
@@ -665,7 +672,8 @@ def main():
         sparse=args.sparse,
         roi=args.roi,
         debug=args.debug,
-        emit_pudc_b_pullup=args.emit_pudc_b_pullup)
+        emit_pudc_b_pullup=args.emit_pudc_b_pullup,
+        strict=args.strict)
 
     # Output that is not a plain file (stdout, a symlink such as /dev/stdout,
     # a pipe) is written directly. run() only writes the frames once they

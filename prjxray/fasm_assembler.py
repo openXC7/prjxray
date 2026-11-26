@@ -13,6 +13,7 @@ import fasm
 import sys
 
 from prjxray import bitstream
+from prjxray.tile_segbits_alias import TileSegbitsAlias
 
 
 class FasmLookupError(Exception):
@@ -114,9 +115,13 @@ def init_frame_at_address(frames, addr):
 
 
 class FasmAssembler(object):
-    def __init__(self, db):
+    def __init__(self, db, strict=False):
         self.db = db
         self.grid = db.grid()
+
+        # A feature that an alias maps to bits outside its tile is an error
+        # when strict, else a warning (and those bits are left out).
+        self.strict = strict
 
         self.seen_tile = set()
         self.frames_in_use = set()
@@ -168,7 +173,8 @@ class FasmAssembler(object):
         assert bit_index is not None
 
         key = (frame_addr, word_addr, bit_index)
-        if word_addr >= 101:
+        # A negative word would index the frame from its end.
+        if not 0 <= word_addr < bitstream.FRAME_WORD_COUNT:
             print(f"frame_set: invalid word address {word_addr} in line: {line}", file=sys.stderr)
             return
         if key in self.frames:
@@ -190,7 +196,7 @@ class FasmAssembler(object):
         assert bit_index is not None
 
         key = (frame_addr, word_addr, bit_index)
-        if word_addr >= 101:
+        if not 0 <= word_addr < bitstream.FRAME_WORD_COUNT:
             print(f"frame_clear: invalid word address {word_addr} in line: {line}", file=sys.stderr)
             return
         if key in self.frames:
@@ -233,17 +239,56 @@ class FasmAssembler(object):
 
         db_k = '%s.%s' % (gridinfo.tile_type, feature)
 
-        any_bits = set()
-
         try:
-            for block_type, bit in segbits.feature_to_bits(gridinfo.bits, db_k,
-                                                           address):
-                any_bits.add(block_type)
-                update_segbit(bit)
+            feature_bits = list(
+                segbits.feature_to_bits(gridinfo.bits, db_k, address))
         except KeyError:
             raise FasmLookupError(
                 "Segment DB %s, key %s not found from line '%s'" %
                 (gridinfo.tile_type, db_k, line))
+
+        # Through an alias (a *_SING tile uses the segbits of the full IOB or
+        # IOI tile, shifted by start_offset), a feature can map to words
+        # outside the tile: words of another tile, or past the end of the
+        # frame. The decoder ignores such bits (TileSegbitsAlias.match_filter),
+        # so don't write them either. A tile's own segbits are left alone,
+        # since some of them do have bits outside the tile's words (for
+        # example virtex7 HCLK_IOI.STEPDOWN).
+        aliased = isinstance(segbits, TileSegbitsAlias)
+
+        def in_tile(block_type, bit):
+            if not aliased:
+                return True
+            tile_bits = gridinfo.bits[block_type]
+            word = bit.word_bit // bitstream.WORD_SIZE_BITS
+            return tile_bits.offset <= word < tile_bits.offset + tile_bits.words
+
+        outside = {}
+        for block_type, bit in feature_bits:
+            if not in_tile(block_type, bit):
+                outside.setdefault(block_type, set()).add(
+                    bit.word_bit // bitstream.WORD_SIZE_BITS)
+        if outside:
+            where = []
+            for block_type, words in outside.items():
+                tile_bits = gridinfo.bits[block_type]
+                where.append(
+                    'word %s, but %s has words %d-%d' % (
+                        ', '.join(str(w) for w in sorted(words)),
+                        block_type.value, tile_bits.offset,
+                        tile_bits.offset + tile_bits.words - 1))
+            msg = (
+                "Feature %s of tile %s has bits outside the tile (%s) from "
+                "line '%s'" % (feature, tile, '; '.join(where), line))
+            if self.strict:
+                raise FasmLookupError(msg)
+            print('WARNING: %s; leaving those bits out' % msg, file=sys.stderr)
+
+        any_bits = set()
+        for block_type, bit in feature_bits:
+            any_bits.add(block_type)
+            if in_tile(block_type, bit):
+                update_segbit(bit)
 
         for block_type in any_bits:
             # Mark all frames used by this tile as in use.
