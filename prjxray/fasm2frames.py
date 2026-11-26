@@ -159,6 +159,94 @@ def add_fabric_tilename_aliases(tile_to_bank, bank_to_tile, db_root, part_data):
             .format(added, replaced))
 
 
+# What Vivado writes on the PUDC_B IOB when the PUDC_B pin is unused, as
+# (name, PUDC_B site lines, partner site lines). Vivado writes them only when
+# it knows the bank's voltage: from a used IO in the same bank, or, for a
+# configuration bank, from CONFIG_VOLTAGE. With neither it leaves the IOB
+# alone. The standard follows that voltage, so these cover the cases that
+# were measured: other bank voltages (upstream saw LVCMOS15 on an xc7k70t)
+# need their own entry. pudc_b_features() takes the first entry whose
+# features all exist for the tile type, so each family gets the names of its
+# own database.
+PUDC_B_TEMPLATES = (
+    # HR bank (IOB33) at 3.3 V: Vivado 2025.2, xc7a35tcpg236-1 with
+    # CONFIG_VOLTAGE 3.3 (bank 14), and xc7z010clg400-1 with LVCMOS33 IOs in
+    # PUDC_B's bank 34.
+    (
+        "HR, 3.3 V",
+        (
+            "{site}.LVCMOS25_LVCMOS33_LVTTL.IN",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY",
+            "{site}.PULLTYPE.PULLUP",
+        ),
+        ("{partner}.PULLTYPE.PULLDOWN", ),
+    ),
+    # HP bank (IOB18), virtex7 xc7vx485tffg1761-2: cross-referenced with a
+    # Vivado-built rst_to_led bitstream. Kept first among the HP entries so
+    # its output is unchanged wherever its names exist.
+    (
+        "HP, virtex7",
+        (
+            "{site}.LVCMOS12_LVCMOS15.IN",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18.IN",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.SLEW.SLOW",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN",
+            "{site}.PULLTYPE.PULLUP",
+        ),
+        (
+            "{partner}.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW",
+            "{partner}.LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN",
+            "{partner}.PULLTYPE.PULLDOWN",
+        ),
+    ),
+    # HP bank (IOB18) at 1.8 V: Vivado 2026.1, xc7z030fbg676-2 and
+    # xc7z035ffg676-2 with LVCMOS18 IOs in PUDC_B's bank 34.
+    (
+        "HP, 1.8 V",
+        (
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18.IN",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW",
+            "{site}.LVCMOS12_LVCMOS15_LVCMOS18_SSTL12_SSTL135_SSTL15.IN_ONLY",
+            "{site}.PULLTYPE.PULLUP",
+        ),
+        (
+            "{partner}.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW",
+            "{partner}.PULLTYPE.PULLDOWN",
+        ),
+    ),
+)
+
+
+def pudc_b_features(known, tile_type, tile, site, partner, partner_used):
+    """Return (template name, FASM lines) for an unused PUDC_B pin.
+
+    known is the set of segbits feature names of tile_type. The partner
+    site's lines are left out when the design uses that site, so they can't
+    clash with its own settings.
+
+    >>> known = {'T.IOB_Y0.LVCMOS25_LVCMOS33_LVTTL.IN',
+    ...          'T.IOB_Y0.LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY',
+    ...          'T.IOB_Y0.PULLTYPE.PULLUP', 'T.IOB_Y1.PULLTYPE.PULLDOWN'}
+    >>> name, lines = pudc_b_features(known, 'T', 'T_X0Y43', 'IOB_Y0', 'IOB_Y1', False)
+    >>> name, len(lines), lines[-1]
+    ('HR, 3.3 V', 4, 'T_X0Y43.IOB_Y1.PULLTYPE.PULLDOWN')
+    >>> pudc_b_features(known, 'T', 'T_X0Y43', 'IOB_Y0', 'IOB_Y1', True)[1][-1]
+    'T_X0Y43.IOB_Y0.PULLTYPE.PULLUP'
+    >>> pudc_b_features(set(), 'T', 'T_X0Y43', 'IOB_Y0', 'IOB_Y1', False)
+    (None, [])
+    """
+    for name, site_lines, partner_lines in PUDC_B_TEMPLATES:
+        template = list(site_lines)
+        if not partner_used:
+            template += list(partner_lines)
+        features = [t.format(site=site, partner=partner) for t in template]
+        if all('{}.{}'.format(tile_type, f) in known for f in features):
+            return name, ['{}.{}'.format(tile, f) for f in features]
+    return None, []
+
+
 def find_pudc_b(db):
     """ Find PUDC_B pin func in grid, and return the tile and site prefix.
 
@@ -292,55 +380,28 @@ def run(
     assembler.parse_fasm_filename(filename_in, extra_features=extra_features)
 
     if emit_pudc_b_pullup and not pudc_b_in_use and pudc_b_tile_site is not None:
-        # Enable IN-only and PULLUP on PUDC_B IOB.
-        #
-        # The set of IOSTANDARD aliases differs per family because HR-bank
-        # (IOB33) silicon supports more standards than HP-bank (IOB18).
-        # Pick the right alias by sniffing the tile name; the chosen alias
-        # has to match a segbits entry exactly or fasm2frames will error.
+        # Enable IN-only and PULLUP on the PUDC_B IOB (and the partner site's
+        # defaults if the design doesn't use it), with the first template
+        # whose features all exist for this tile type.
         missing_features = []
-        is_hp = pudc_b_tile_site[0].startswith('LIOB18') or \
-                pudc_b_tile_site[0].startswith('RIOB18')
-        if is_hp:
-            # HP-bank (virtex7 xc7vx485tffg1761-2) — Vivado emits this exact
-            # feature set on the PUDC_B IOB; the bits flow from segbits
-            # entries on LVCMOS12_LVCMOS15.IN, LVCMOS12_LVCMOS15_LVCMOS18.IN,
-            # the long IN_ONLY alias, two SLEW.SLOW aliases, the STEPDOWN
-            # alias, PULLTYPE.PULLUP on Y0, and Y1's default-state SLEW/
-            # STEPDOWN/PULLDOWN trio. Cross-referenced with a Vivado-built
-            # rst_to_led reference bitstream.
-            pudc_template = (
-                "{tile}.{site}.LVCMOS12_LVCMOS15.IN\n"
-                "{tile}.{site}.LVCMOS12_LVCMOS15_LVCMOS18.IN\n"
-                "{tile}.{site}.LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVDS_25_LVTTL_SSTL135_SSTL15_TMDS_33.IN_ONLY\n"
-                "{tile}.{site}.LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.SLEW.SLOW\n"
-                "{tile}.{site}.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW\n"
-                "{tile}.{site}.LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN\n"
-                "{tile}.{site}.PULLTYPE.PULLUP\n"
-                "{tile}.{partner}.LVCMOS12_LVCMOS15_LVCMOS18.SLEW.SLOW\n"
-                "{tile}.{partner}.LVCMOS12_LVCMOS15_LVCMOS18_SSTL135_SSTL15.STEPDOWN\n"
-                "{tile}.{partner}.PULLTYPE.PULLDOWN\n"
-            )
-            partner = 'IOB_Y1' if pudc_b_tile_site[1] == 'IOB_Y0' else 'IOB_Y0'
-            for line in fasm.parse_fasm_string(pudc_template.format(
-                    tile=pudc_b_tile_site[0],
-                    site=pudc_b_tile_site[1],
-                    partner=partner)):
-                assembler.add_fasm_line(line, missing_features)
-        else:
-            # HR-bank (artix7/kintex7-HR/zynq7/spartan7) — original 3-line
-            # template kept intact. TODO from the original code still
-            # applies to K70T: it is known to be wrong but we have no
-            # better data here.
-            for line in fasm.parse_fasm_string("""
-{tile}.{site}.LVCMOS12_LVCMOS15_LVCMOS18_LVCMOS25_LVCMOS33_LVTTL_SSTL135_SSTL15.IN_ONLY
-{tile}.{site}.LVCMOS25_LVCMOS33_LVTTL.IN
-{tile}.{site}.PULLTYPE.PULLUP
-""".format(
-                    tile=pudc_b_tile_site[0],
-                    site=pudc_b_tile_site[1],
-            )):
-                assembler.add_fasm_line(line, missing_features)
+        tile, site = pudc_b_tile_site
+        partner = 'IOB_Y1' if site == 'IOB_Y0' else 'IOB_Y0'
+        partner_used = any(
+            f.value != 0
+            and f.feature.startswith('{}.{}.'.format(tile, partner))
+            for f in set_features)
+        tile_type = db.grid().gridinfo_at_tilename(tile).tile_type
+        known = set()
+        for block_features in db.get_tile_segbits(tile_type).segbits.values():
+            known.update(block_features)
+        name, pudc_features = pudc_b_features(
+            known, tile_type, tile, site, partner, partner_used)
+        if name is None:
+            raise fasm_assembler.FasmLookupError(
+                "No PUDC_B template has all of its features in the segbits "
+                "of {} (PUDC_B is {}.{})".format(tile_type, tile, site))
+        for line in fasm.parse_fasm_string('\n'.join(pudc_features)):
+            assembler.add_fasm_line(line, missing_features)
 
         if missing_features:
             raise fasm_assembler.FasmLookupError('\n'.join(missing_features))
