@@ -191,6 +191,25 @@ CLBLM_L_X10Y102.SLICEM_X0.SRUSEDMUX 1
         self.bitread_frm_equals(
             'iob/liob_stepdown.fasm', 'iob/liob_stepdown.bits')
 
+    def test_stepdown_unbonded_iob(self):
+        '''STEPDOWN reaches the IOB33 tiles the package doesn't bond out.
+
+        Bank 77 of the test database is HCLK_IOI3_X150Y26 with RIOB33_X60Y1,
+        which package_pins.csv lists, and RIOB33_X60Y3, in the same clock
+        region and IO column, which it doesn't. Vivado sets STEPDOWN on
+        every IOB33 of the bank, bonded or not (#84).
+        '''
+        bits = frm2bits(
+            self.fasm2frames('RIOB33_X60Y1.IOB_Y0.SOMETHING.STEPDOWN\n'))
+        # RIOB33.IOB_Y*.SOMETHING.STEPDOWN is 00_03 and HCLK_IOI3.STEPDOWN
+        # 00_16: word 2 of RIOB33_X60Y1, word 6 of RIOB33_X60Y3 and word 50
+        # of HCLK_IOI3_X150Y26, all in frame 0x00402000.
+        self.assertEqual(
+            {(0x00402000, 2, 3), (0x00402000, 6, 3), (0x00402000, 50, 16)},
+            {b
+             for b in bits
+             if b[0] == 0x00402000})
+
     def test_stepdown_2(self):
         self.bitread_frm_equals(
             'iob/riob_stepdown.fasm', 'iob/riob_stepdown.bits')
