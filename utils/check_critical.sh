@@ -25,6 +25,12 @@ set -euo pipefail
 log="${1:?usage: check_critical.sh LOG [ALLOW_FILE]}"
 allow="${2:-}"
 
+# A log that's missing or unreadable must not pass as one without warnings.
+if [ ! -r "$log" ]; then
+    echo "$log: missing or unreadable, so it can't be checked for CRITICAL WARNINGs" >&2
+    exit 1
+fi
+
 critical="$(grep -F CRITICAL "$log" || true)"
 if [ -z "$critical" ]; then
     exit 0
