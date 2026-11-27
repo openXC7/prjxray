@@ -6,71 +6,10 @@
 #
 # SPDX-License-Identifier: ISC
 #
-# Shared generate.tcl of cmt_upper_b and cmt_lower_t. routes.txt (from
-# cmt_phaser.py) has, per line:
-#   <BUFMR net> <BUFR cell> <CMT_TOP tile> <mux source wire> <mux output wire>
-#   <HCLK_CMT tile> <RCLK n> <PERFCLK m>
-# Each BUFR is placed in its HCLK_CMT tile's clock region, on a site that
-# PERFCLK m reaches, and each BUFMR net's route is fixed through the named
-# mux input, PHASER_IN, RCLK and PERFCLK before route_design.
+# Shared generate.tcl of cmt_upper_b and cmt_lower_t; the routes are
+# fixed by utils/cmt_phaser_routes.tcl.
 
-proc node_of_wire {w} {
-    set n [get_nodes -quiet -of_objects [get_wires -quiet $w]]
-    if {$n eq ""} { error "no wire $w" }
-    return $n
-}
-
-proc read_routes {} {
-    set routes {}
-    set fp [open routes.txt r]
-    while {[gets $fp line] >= 0} {
-        if {[string trim $line] ne ""} { lappend routes $line }
-    }
-    close $fp
-    return $routes
-}
-
-proc place_bufrs {routes} {
-    set used {}
-    foreach r $routes {
-        lassign $r net bufr ctile src mux hclk n m
-        set region [get_property CLOCK_REGION [lindex [get_sites -of_objects [get_tiles $hclk]] 0]]
-        set n_perf [node_of_wire "$hclk/HCLK_CMT_MUX_PHSR_PERFCLK$m"]
-        set site ""
-        foreach s [lsort [get_sites -quiet -filter "SITE_TYPE == BUFR && CLOCK_REGION == $region"]] {
-            if {[lsearch $used $s] >= 0} { continue }
-            if {[find_routing_path -quiet -from $n_perf -to [get_nodes -of_objects [get_site_pins $s/I]]] ne ""} {
-                set site $s
-                break
-            }
-        }
-        if {$site eq ""} { error "no BUFR in $region reachable from $hclk PERFCLK$m" }
-        lappend used $site
-        set_property LOC $site [get_cells $bufr]
-    }
-}
-
-proc fix_routes {routes} {
-    foreach r $routes {
-        lassign $r net bufr ctile src mux hclk n m
-        set bufmr [get_sites -of_objects [get_cells -of_objects [get_pins -leaf -filter {DIRECTION == OUT} -of_objects [get_nets $net]]]]
-        set bufr_site [get_sites -of_objects [get_cells $bufr]]
-        set hops [list \
-            [get_nodes -of_objects [get_site_pins $bufmr/O]] \
-            [node_of_wire "$ctile/$src"] \
-            [node_of_wire "$ctile/$mux"] \
-            [node_of_wire "$hclk/HCLK_CMT_PHASERIN_RCLK$n"] \
-            [node_of_wire "$hclk/HCLK_CMT_MUX_PHSR_PERFCLK$m"] \
-            [get_nodes -of_objects [get_site_pins $bufr_site/I]]]
-        set route {}
-        for {set i 0} {$i < [llength $hops] - 1} {incr i} {
-            set seg [find_routing_path -quiet -from [lindex $hops $i] -to [lindex $hops [expr {$i + 1}]]]
-            if {$seg eq ""} { error "no path for $net from [lindex $hops $i] to [lindex $hops [expr {$i + 1}]]" }
-            if {$route eq ""} { set route $seg } else { set route [concat $route [lrange $seg 1 end]] }
-        }
-        set_property FIXED_ROUTE $route [get_nets $net]
-    }
-}
+source "$::env(XRAY_DIR)/utils/cmt_phaser_routes.tcl"
 
 proc run {} {
     create_project -force -part $::env(XRAY_PART) design design
