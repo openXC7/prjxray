@@ -44,7 +44,7 @@ proc write_tiles_txt {} {
                 lappend typed_sites [get_property PROHIBIT $s]
 
                 set package_pin [get_package_pins -of $s -quiet]
-                if [llength $package_pin] {
+                if {[llength $package_pin] == 1} {
                     puts $fp_pin "$s [get_property PIN_FUNC $package_pin]"
                 }
                 set clock_region [get_property CLOCK_REGION $s]
