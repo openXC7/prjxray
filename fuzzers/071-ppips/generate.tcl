@@ -60,6 +60,12 @@ proc write_int_ppips_db {filename tile} {
         set dst_wire [get_wires -downhill -of_objects $pip]
         if {[get_pips -uphill -of_objects [get_nodes -of_objects $dst_wire]] == $pip} {
             set src_wire [get_wires -uphill -of_objects $pip]
+            # A PHASER_IN route-through has the only pip into its wire but
+            # is not always on: it sets two bits (045c-cmt-top-phaser).
+            if {[string match CMT_TOP_* $tile_type] &&
+                [regexp {CMT_PHASER_IN_(CA|DB)_RCLK$} $dst_wire]} {
+                continue
+            }
             puts $fp "${tile_type}.[regsub {.*/} $dst_wire ""].[regsub {.*/} $src_wire ""] always"
         }
     }

@@ -47,6 +47,8 @@ TILEGRID_TDB_DEPENDENCIES += monitor_int/$(BUILD_FOLDER)/segbits_tilegrid.tdb
 TILEGRID_TDB_DEPENDENCIES += clk_hrow/$(BUILD_FOLDER)/segbits_tilegrid.tdb
 TILEGRID_TDB_DEPENDENCIES += clk_bufg/$(BUILD_FOLDER)/segbits_tilegrid.tdb
 TILEGRID_TDB_DEPENDENCIES += hclk_cmt/$(BUILD_FOLDER)/segbits_tilegrid.tdb
+TILEGRID_TDB_DEPENDENCIES += cmt_upper_b/$(BUILD_FOLDER)/segbits_tilegrid.tdb
+TILEGRID_TDB_DEPENDENCIES += cmt_lower_t/$(BUILD_FOLDER)/segbits_tilegrid.tdb
 TILEGRID_TDB_DEPENDENCIES += pll/$(BUILD_FOLDER)/segbits_tilegrid.tdb
 TILEGRID_TDB_DEPENDENCIES += hclk_ioi/$(BUILD_FOLDER)/segbits_tilegrid.tdb
 TILEGRID_TDB_DEPENDENCIES += mmcm/$(BUILD_FOLDER)/segbits_tilegrid.tdb
@@ -204,6 +206,12 @@ clk_bufg/$(BUILD_FOLDER)/segbits_tilegrid.tdb: ${BASICDB_TILEGRID}
 hclk_cmt/$(BUILD_FOLDER)/segbits_tilegrid.tdb: ${BASICDB_TILEGRID}
 	cd hclk_cmt && test -s ${OKFLAG} || ($(MAKE) && touch ${OKFLAG})
 
+cmt_upper_b/$(BUILD_FOLDER)/segbits_tilegrid.tdb: ${BASICDB_TILEGRID}
+	cd cmt_upper_b && test -s ${OKFLAG} || ($(MAKE) && touch ${OKFLAG})
+
+cmt_lower_t/$(BUILD_FOLDER)/segbits_tilegrid.tdb: ${BASICDB_TILEGRID}
+	cd cmt_lower_t && test -s ${OKFLAG} || ($(MAKE) && touch ${OKFLAG})
+
 hclk_ioi/$(BUILD_FOLDER)/segbits_tilegrid.tdb: ${BASICDB_TILEGRID}
 	cd hclk_ioi && test -s ${OKFLAG} || ($(MAKE) && touch ${OKFLAG})
 
@@ -274,6 +282,8 @@ clean:
 	cd clk_hrow && $(MAKE) clean
 	cd clk_bufg && $(MAKE) clean
 	cd hclk_cmt && $(MAKE) clean
+	cd cmt_upper_b && $(MAKE) clean
+	cd cmt_lower_t && $(MAKE) clean
 	cd hclk_ioi && $(MAKE) clean
 	cd pcie && $(MAKE) clean
 	cd pcie_int_interface && $(MAKE) clean
@@ -313,6 +323,8 @@ clean_part:
 	cd clk_hrow && $(MAKE) clean_part
 	cd clk_bufg && $(MAKE) clean_part
 	cd hclk_cmt && $(MAKE) clean_part
+	cd cmt_upper_b && $(MAKE) clean_part
+	cd cmt_lower_t && $(MAKE) clean_part
 	cd hclk_ioi && $(MAKE) clean_part
 	cd pcie && $(MAKE) clean_part
 	cd pcie_int_interface && $(MAKE) clean_part

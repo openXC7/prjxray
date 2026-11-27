@@ -119,6 +119,8 @@ def run(fn_in, fn_out, verbose=False):
         ("clk_hrow", 30, 18),
         ("clk_bufg", 30, 8),
         ("hclk_cmt", 30, 10),
+        ("cmt_upper_b", 30, 19),
+        ("cmt_lower_t", 30, 19),
         ("hclk_ioi", 42, 1),
         ("pcie", 36, 101),
         ("gtp_common", 32, 101),

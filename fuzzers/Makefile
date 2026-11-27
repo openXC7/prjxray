@@ -188,6 +188,10 @@ $(eval $(call fuzzer,042-clk-bufg-config,005-tilegrid,all))
 $(eval $(call fuzzer,043-clk-rebuf-pips,005-tilegrid,all))
 $(eval $(call fuzzer,044-clk-bufg-pips,046-clk-bufg-muxed-pips,all))
 $(eval $(call fuzzer,045-hclk-cmt-pips,005-tilegrid,all))
+# 045c: the PHASER_IN route-throughs and reference muxes of the CMT_TOP
+# UPPER_B / LOWER_T tiles, whose bits entries 005-tilegrid's cmt_upper_b and
+# cmt_lower_t add.
+$(eval $(call fuzzer,045c-cmt-top-phaser,005-tilegrid,all))
 $(eval $(call fuzzer,046-clk-bufg-muxed-pips,005-tilegrid,all))
 ifeq ($(HAS_HIGH_RANGE_BANKS),1)
 $(eval $(call fuzzer,047-hclk-ioi-pips,005-tilegrid,all))

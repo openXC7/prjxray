@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2026  The Project X-Ray Authors.
+#
+# Use of this source code is governed by a ISC-style
+# license that can be found in the LICENSE file or at
+# https://opensource.org/licenses/ISC
+#
+# SPDX-License-Identifier: ISC
+"""One specimen: BUFMRs driving BUFRs through PHASER_IN route-throughs.
+
+A BUFMR's only way to a BUFR is through a PHASER_IN of a CMT_TOP_*_UPPER_B
+(PHASER_IN C and D) or *_LOWER_T (A and B) tile:
+
+  BUFMRCE_O -> PHASEREF wire -> the PHASER_IN's reference mux ->
+  PHASER_IN route-through -> HCLK_CMT_PHASERIN_RCLK<n> ->
+  HCLK_CMT_MUX_PHSR_PERFCLK<m> -> BUFR
+
+The mux takes the region's own BUFMRs (PHASERREF0/1) or those of the region
+above or below (PHASERREF_ABOVE0/1, PHASERREF_BELOW0/1). Each specimen
+picks, at random, which PHASER_INs are used and from which input, and
+which PERFCLK each route takes. The mux input is not drawn at random: each
+specimen prefers a different one, rotating with the specimen number, and
+takes the next one in turn that the tile has and whose BUFMR is free. So
+even a CMT column of two regions, whose tiles have only four of the six
+inputs, sees every input. generate.tcl fixes the routes through
+exactly those wires. Each BUFMR drives one BUFR, each PHASER_IN carries at
+most one route, and each PERFCLK of a region at most one.
+
+Writes top.v and routes.txt (one line per route, see generate.tcl).
+"""
+import os
+import random
+random.seed(int(os.getenv("SEED"), 16))
+from prjxray import util
+from prjxray.db import Database
+
+# PHASER_IN -> (tile suffix, mux output wire, mux input prefix, RCLK n)
+PHASER_IN = {
+    "A": ("_LOWER_T", "CMT_PHASERREF_DOWN_PHASERIN_A", "CMT_PHASER_DOWN_", 0),
+    "B": ("_LOWER_T", "CMT_PHASERREF_DOWN_PHASERIN_B", "CMT_PHASER_DOWN_", 1),
+    "C": ("_UPPER_B", "CMT_PHASERREF_PHASERIN_C", "CMT_PHASER_UP_", 2),
+    "D": ("_UPPER_B", "CMT_PHASERREF_PHASERIN_D", "CMT_PHASER_UP_", 3),
+}
+# mux input -> (which region's BUFMR, BUFMR site index)
+INPUTS = {
+    "PHASERREF0": (0, 0),
+    "PHASERREF1": (0, 1),
+    "PHASERREF_ABOVE0": (-1, 0),
+    "PHASERREF_ABOVE1": (-1, 1),
+    "PHASERREF_BELOW0": (1, 0),
+    "PHASERREF_BELOW1": (1, 1),
+}
+INPUT_ORDER = list(INPUTS)
+# Probability that a PHASER_IN carries a route, so that unused ones are
+# seen too.
+P_USED = 0.8
+
+
+def gen_columns():
+    """Per CMT column, top to bottom: (HCLK_CMT tile, BUFMR sites, {suffix: CMT_TOP tile})."""
+    db = Database(util.get_db_root(), util.get_part())
+    grid = db.grid()
+    hclk, cmt = {}, {}
+    for tile_name in sorted(grid.tiles()):
+        gi = grid.gridinfo_at_tilename(tile_name)
+        loc = grid.loc_of_tilename(tile_name)
+        bufmrs = sorted(s for s, t in gi.sites.items() if t == "BUFMRCE")
+        if len(bufmrs) == 2:
+            hclk.setdefault(loc.grid_x, []).append((loc.grid_y, tile_name, bufmrs))
+        for suffix in ("_UPPER_B", "_LOWER_T"):
+            if gi.tile_type.startswith("CMT_TOP_") and gi.tile_type.endswith(suffix):
+                cmt.setdefault((loc.grid_x, suffix), []).append((loc.grid_y, tile_name))
+    for x, regions in sorted(hclk.items()):
+        col = []
+        for y, tile_name, bufmrs in sorted(regions):
+            tiles = {}
+            for suffix in ("_UPPER_B", "_LOWER_T"):
+                cands = cmt.get((x, suffix), [])
+                if cands:
+                    tiles[suffix] = min((abs(cy - y), t) for cy, t in cands)[1]
+            col.append((tile_name, bufmrs, tiles))
+        yield col
+
+
+def run():
+    routes = []
+    bufmr_used = set()
+    spec = util.specn()
+    for col in gen_columns():
+        order = list(range(len(col)))
+        random.shuffle(order)
+        for r in order:
+            hclk, _, tiles = col[r]
+            free_perfclk = [0, 1, 2, 3]
+            phasers = list(PHASER_IN)
+            random.shuffle(phasers)
+            for p in phasers:
+                suffix, mux, prefix, rclk = PHASER_IN[p]
+                if suffix not in tiles or random.random() > P_USED:
+                    continue
+                first = (spec + r + "ABCD".index(p)) % len(INPUT_ORDER)
+                choices = []
+                for i in range(len(INPUT_ORDER)):
+                    inp = INPUT_ORDER[(first + i) % len(INPUT_ORDER)]
+                    dr, k = INPUTS[inp]
+                    rr = r + dr
+                    if 0 <= rr < len(col):
+                        site = col[rr][1][k]
+                        if site not in bufmr_used:
+                            choices.append((inp, site))
+                if not choices or not free_perfclk:
+                    continue
+                inp, site = choices[0]
+                m = random.choice(free_perfclk)
+                free_perfclk.remove(m)
+                bufmr_used.add(site)
+                routes.append((site, "br%d" % len(routes), tiles[suffix],
+                               prefix + inp, mux, hclk, rclk, m))
+
+    print('''// Generated by 045c-cmt-top-phaser/top.py
+module top(input clk, output o);
+    reg t = 1'b0;
+    always @(posedge clk) t <= ~t;
+    wire [{n}:0] q;'''.format(n=max(len(routes) - 1, 0)))
+    for i, (site, bufr, *_rest) in enumerate(routes):
+        print('''
+    wire m_{site}, r_{bufr};
+    (* KEEP, DONT_TOUCH, LOC = "{site}" *)
+    BUFMR bm_{site} (.I(t), .O(m_{site}));
+    (* KEEP, DONT_TOUCH *)
+    BUFR #(.BUFR_DIVIDE("BYPASS")) {bufr} (.I(m_{site}), .O(r_{bufr}), .CE(1'b1), .CLR(1'b0));
+    reg q_{bufr} = 1'b0;
+    always @(posedge r_{bufr}) q_{bufr} <= ~q_{bufr};
+    assign q[{i}] = q_{bufr};'''.format(site=site, bufr=bufr, i=i))
+    print('''
+    assign o = ^q;
+endmodule''')
+    with open("routes.txt", "w") as f:
+        for site, bufr, ctile, src, mux, hclk, n, m in routes:
+            f.write("m_%s %s %s %s %s %s %d %d\n" % (site, bufr, ctile, src, mux, hclk, n, m))
+
+
+if __name__ == "__main__":
+    run()
