@@ -5,7 +5,9 @@
 # https://opensource.org/licenses/ISC
 #
 # SPDX-License-Identifier: ISC
-N := 6
+# top.py fixes random.seed(0), so every specimen is the same design and
+# more than one adds nothing (#113).
+N := 1
 SLICEL ?= N
 include ../clb.mk
 
