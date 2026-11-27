@@ -1,0 +1,7 @@
+# CRITICAL WARNINGs this fuzzer is known to produce; see
+# utils/check_critical.sh for the format (issue, a tab, an ERE).
+#
+# Vivado 2025.2 cannot place the MUXF7/MUXF8 cells in their LOC'd slice,
+# so this fuzzer loses its F7/F8 tags there; prjxray-db keeps the rows
+# from older releases.
+#114	\[Constraints 18-5\] Cannot loc instance .* at site SLICE_X[0-9]+Y[0-9]+, Shape is trying to block loc SLICE_X[0-9]+Y[0-9]+\.[A-D]6LUT, however cell .* is already placed at this location

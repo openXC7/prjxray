@@ -10,7 +10,7 @@ top.v.ok:
 
 vivado.ok: top.v.ok ${FUZDIR}/generate.tcl
 	${XRAY_VIVADO} -mode batch -source ${FUZDIR}/generate.tcl
-	test -z "$(fgrep CRITICAL vivado.log)"
+	${XRAY_DIR}/utils/check_critical.sh vivado.log ${FUZDIR}/critical_warnings_allowed.txt
 	touch vivado.ok
 
 design_bits.ok: vivado.ok
