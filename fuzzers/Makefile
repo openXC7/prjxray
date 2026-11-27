@@ -217,6 +217,9 @@ $(eval $(call fuzzer,058-pip-hclk,005-tilegrid,all))
 # into files 045 and 058 own, so it runs after both.
 ifeq ($(HAS_HIGH_RANGE_BANKS),1)
 $(eval $(call fuzzer,039a-hclk-bufrclk-perfclk,005-tilegrid 045-hclk-cmt-pips 058-pip-hclk,all))
+# 045b reuses 045's helpers and 039a's filter, and adds rows to the
+# HCLK_CMT files both of them write, so it runs after both.
+$(eval $(call fuzzer,045b-hclk-cmt-bufmr,005-tilegrid 045-hclk-cmt-pips 039a-hclk-bufrclk-perfclk,all))
 endif
 $(eval $(call fuzzer,059-pip-byp-bounce,048-int-piplist,all))
 $(eval $(call fuzzer,060-bram-cascades,005-tilegrid,all))
