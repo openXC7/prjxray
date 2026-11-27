@@ -8,7 +8,7 @@
 #
 # Needs the tilegrid's bits entries for CMT_TOP_*_UPPER_B and *_LOWER_T,
 # from 005-tilegrid's cmt_upper_b and cmt_lower_t. See README.md.
-N ?= 40
+N ?= 60
 FUZDIR ?= ${PWD}
 
 SPECIMENS := $(addprefix build/specimen_,$(shell seq -f '%03.0f' $(N)))

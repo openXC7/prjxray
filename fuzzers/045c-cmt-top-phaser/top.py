@@ -20,7 +20,11 @@ A BUFMR's only way to a BUFR is through a PHASER_IN of a CMT_TOP_*_UPPER_B
 The mux takes the region's own BUFMRs (PHASERREF0/1) or those of the region
 above or below (PHASERREF_ABOVE0/1, PHASERREF_BELOW0/1). Each specimen
 picks, at random, which PHASER_INs are used and from which input, and
-which PERFCLK each route takes; generate.tcl fixes the routes through
+which PERFCLK each route takes. The mux input is not drawn at random: each
+specimen prefers a different one, rotating with the specimen number, and
+takes the next one in turn that the tile has and whose BUFMR is free. So
+even a CMT column of two regions, whose tiles have only four of the six
+inputs, sees every input. generate.tcl fixes the routes through
 exactly those wires. Each BUFMR drives one BUFR, each PHASER_IN carries at
 most one route, and each PERFCLK of a region at most one.
 
@@ -48,9 +52,10 @@ INPUTS = {
     "PHASERREF_BELOW0": (1, 0),
     "PHASERREF_BELOW1": (1, 1),
 }
+INPUT_ORDER = list(INPUTS)
 # Probability that a PHASER_IN carries a route, so that unused ones are
 # seen too.
-P_USED = 0.7
+P_USED = 0.8
 
 
 def gen_columns():
@@ -82,6 +87,7 @@ def gen_columns():
 def run():
     routes = []
     bufmr_used = set()
+    spec = util.specn()
     for col in gen_columns():
         order = list(range(len(col)))
         random.shuffle(order)
@@ -94,8 +100,11 @@ def run():
                 suffix, mux, prefix, rclk = PHASER_IN[p]
                 if suffix not in tiles or random.random() > P_USED:
                     continue
+                first = (spec + r + "ABCD".index(p)) % len(INPUT_ORDER)
                 choices = []
-                for inp, (dr, k) in INPUTS.items():
+                for i in range(len(INPUT_ORDER)):
+                    inp = INPUT_ORDER[(first + i) % len(INPUT_ORDER)]
+                    dr, k = INPUTS[inp]
                     rr = r + dr
                     if 0 <= rr < len(col):
                         site = col[rr][1][k]
@@ -103,7 +112,7 @@ def run():
                             choices.append((inp, site))
                 if not choices or not free_perfclk:
                     continue
-                inp, site = random.choice(choices)
+                inp, site = choices[0]
                 m = random.choice(free_perfclk)
                 free_perfclk.remove(m)
                 bufmr_used.add(site)

@@ -50,9 +50,12 @@ ppips files.
 
 ## Specimens
 
-`make` builds `N` (default 40) specimens. In each, `top.py` picks at
-random, per clock region, which PHASER_INs carry a route, from which mux
-input, and which `PHSR_PERFCLK` each takes. Each BUFMR drives one BUFR,
+`make` builds `N` (default 60) specimens. In each, `top.py` picks at
+random, per clock region, which PHASER_INs carry a route and which
+`PHSR_PERFCLK` each takes. The mux input rotates with the specimen number,
+taking the next input the tile has and whose BUFMR is free, so that even a
+CMT column of two regions (xc7a100t's left one), whose tiles have only four
+of the six inputs, sees each of them at least five times. Each BUFMR drives one BUFR,
 each PHASER_IN carries at most one route, and each PERFCLK of a region at
 most one. `generate.tcl` places each BUFR on a site its PERFCLK reaches and
 fixes every route through the named wires (`utils/cmt_phaser_routes.tcl`),
