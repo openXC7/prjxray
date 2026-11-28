@@ -85,6 +85,33 @@
         "prohibited_sites": [],
         "type": "LIOB33_SING"
     },
+    "LIOB33_SING_X0Y49": {
+        "bits": {
+            "CLB_IO_CLK": {
+                "alias": {
+                    "sites": {
+                        "IOB33_Y0": "IOB33_Y1"
+                    },
+                    "start_offset": 0,
+                    "type": "LIOB33"
+                },
+                "baseaddr": "0x00400000",
+                "frames": 42,
+                "offset": 99,
+                "words": 2
+            }
+        },
+        "grid_x": 0,
+        "grid_y": 106,
+        "pin_functions": {
+            "IOB_X0Y49": "IO_0_14"
+        },
+        "sites": {
+            "IOB_X0Y49": "IOB33"
+        },
+        "prohibited_sites": [],
+        "type": "LIOB33_SING"
+    },
     "LIOB33_X0Y1": {
         "bits": {
             "CLB_IO_CLK": {
