@@ -637,8 +637,9 @@ def main():
         '--strict',
         action='store_true',
         help="Fail when an aliased tile's feature maps to bits outside the "
-        "tile, for example a feature of the site a *_SING tile does not have "
-        "(default: warn and leave those bits out)")
+        "tile, for example a feature of the site a *_SING tile does not "
+        "have, even with XRAY_ALLOW_MISSING_FEATURES=1 (default: warn and "
+        "leave the feature out)")
     parser.add_argument(
         '--debug', action='store_true', help="Print debug dump")
     parser.add_argument('fn_in', help='Input FPGA assembly (.fasm) file')

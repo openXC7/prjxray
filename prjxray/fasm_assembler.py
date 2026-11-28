@@ -20,6 +20,11 @@ class FasmLookupError(Exception):
     pass
 
 
+class FasmOutOfTileBits(FasmLookupError):
+    '''An aliased tile's feature maps to bits outside the tile.'''
+    pass
+
+
 class FasmInconsistentBits(Exception):
     pass
 
@@ -119,9 +124,12 @@ class FasmAssembler(object):
         self.db = db
         self.grid = db.grid()
 
-        # A feature that an alias maps to bits outside its tile is an error
-        # when strict, else a warning (and those bits are left out).
+        # A feature that an alias maps to bits outside its tile is left out
+        # entirely. That is an error when strict, else a warning.
+        # XRAY_ALLOW_MISSING_FEATURES=1 does not turn the error into a
+        # warning.
         self.strict = strict
+        self.out_of_tile = []
 
         self.seen_tile = set()
         self.frames_in_use = set()
@@ -134,7 +142,17 @@ class FasmAssembler(object):
     def set_feature_callback(self, feature_callback):
         self.feature_callback = feature_callback
 
+    def check_out_of_tile(self):
+        '''When strict, fail if a feature was left out for having bits
+        outside its tile.'''
+        if self.strict and self.out_of_tile:
+            raise FasmOutOfTileBits('\n'.join(self.out_of_tile))
+
     def get_frames(self, sparse=False):
+        # Also covers the features fasm2frames adds after the FASM file
+        # (STEPDOWN, bank glue), whose lookup errors it may ignore.
+        self.check_out_of_tile()
+
         if not sparse:
             frames = self.frames_init()
         else:
@@ -277,18 +295,18 @@ class FasmAssembler(object):
                         ', '.join(str(w) for w in sorted(words)),
                         block_type.value, tile_bits.offset,
                         tile_bits.offset + tile_bits.words - 1))
-            msg = (
+            # Leave the whole feature out, including the bits that are in
+            # the tile: some aliased features (for example
+            # DIFF.ZIBUF_LOW_PWR) also need the absent partner site's
+            # words, and only half of such a setting is not useful.
+            raise FasmOutOfTileBits(
                 "Feature %s of tile %s has bits outside the tile (%s) from "
                 "line '%s'" % (feature, tile, '; '.join(where), line))
-            if self.strict:
-                raise FasmLookupError(msg)
-            print('WARNING: %s; leaving those bits out' % msg, file=sys.stderr)
 
         any_bits = set()
         for block_type, bit in feature_bits:
             any_bits.add(block_type)
-            if in_tile(block_type, bit):
-                update_segbit(bit)
+            update_segbit(bit)
 
         for block_type in any_bits:
             # Mark all frames used by this tile as in use.
@@ -300,8 +318,6 @@ class FasmAssembler(object):
     def add_fasm_line(self, line, missing_features):
         if not line.set_feature:
             return
-
-        self.feature_callback(line.set_feature)
 
         line_strs = tuple(fasm.fasm_line_to_string(line))
         assert len(line_strs) == 1
@@ -316,6 +332,7 @@ class FasmAssembler(object):
         #
         # canonical_features also filters out features that are not enabled,
         # which are no-ops.
+        left_out = False
         for flat_set_feature in fasm.canonical_features(line.set_feature):
             address = 0
             if flat_set_feature.start is not None:
@@ -323,8 +340,22 @@ class FasmAssembler(object):
 
             try:
                 self.enable_feature(tile, feature, address, line_str)
+            except FasmOutOfTileBits as e:
+                # Kept apart from missing_features, which the caller may
+                # ignore (XRAY_ALLOW_MISSING_FEATURES=1, bank glue).
+                self.out_of_tile.append(str(e))
+                left_out = True
+                if not self.strict:
+                    print(
+                        'WARNING: %s; leaving the feature out' % e,
+                        file=sys.stderr)
             except FasmLookupError as e:
                 missing_features.append(str(e))
+
+        # A feature left out is not reported as set, so that fasm2frames
+        # does not, for example, copy its STEPDOWN to the rest of the bank.
+        if not left_out:
+            self.feature_callback(line.set_feature)
 
     def parse_fasm_filename(self, filename, extra_features=[]):
         missing_features = []
@@ -333,6 +364,8 @@ class FasmAssembler(object):
 
         for line in extra_features:
             self.add_fasm_line(line, missing_features)
+
+        self.check_out_of_tile()
 
         if missing_features:
             # Allow the assembler to keep going when only a small number of
